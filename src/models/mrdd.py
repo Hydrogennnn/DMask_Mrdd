@@ -139,7 +139,7 @@ class MRDD(nn.Module):
     def get_loss(self, Xs):
         if self.args.consistency.enable:
             with torch.no_grad():
-                C = self.consis_enc.consistency_features(Xs)
+                C = self.consis_enc.consistency_features(Xs) # without grad
         else:
             C = None
         return_details = {}
@@ -148,16 +148,15 @@ class MRDD(nn.Module):
             venc = self.__getattr__(f"venc_{i+1}")
             mi_est = self.__getattr__(f"mi_est_{i+1}")
             
-            # recons_loss, kld_loss = venc.get_loss(Xs[i], y=C)
+            recons_loss, kld_loss = venc.get_loss(Xs[i], y=C)
             mi_lb = mi_est.learning_loss(venc.latent(Xs[i]), C)
             disent_loss = self.args.disent.lam * mi_lb
             
-            # return_details[f'v{i+1}-recon-loss'] = recons_loss.item()
-            # return_details[f'v{i+1}-kld-loss'] = kld_loss.item()
+            return_details[f'v{i+1}-recon-loss'] = recons_loss.item()
+            return_details[f'v{i+1}-kld-loss'] = kld_loss.item()
             return_details[f'v{i+1}-disent-loss'] = disent_loss.item()
             
-            # loss = (recons_loss + kld_loss + disent_loss)
-            loss = disent_loss
+            loss = (recons_loss + kld_loss + disent_loss)
             return_details[f'v{i+1}-total-loss'] = loss.item()
             losses.append(loss)
             

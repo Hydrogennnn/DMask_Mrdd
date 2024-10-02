@@ -9,7 +9,7 @@ import torch.distributions as dist
 # from autoencoder import Encoder, Decoder
 from .autoencoder import Encoder, Decoder
 from .resnet import resnet18, resnet34, resnet50
-from utils import mask_image
+from ..utils.misc import (mask_image, mask_view)
 
 class ConsistencyAE(nn.Module):
 
@@ -154,7 +154,9 @@ class ConsistencyAE(nn.Module):
         
     
     
-    def get_loss(self, Xs, epoch, mask_ratio, mask_patch_size):
+    def get_loss(self, Xs, epoch, mask_ratio, mask_patch_size, mask_view_ratio):
+        # mask view
+        Xs = mask_view(Xs, mask_view_ratio=mask_view_ratio, views=self.views)
         # Masked cross-view distribution modeling.
         Xs_masked = [mask_image(x, mask_patch_size, mask_ratio=mask_ratio) for x in Xs]
         if self.continous:

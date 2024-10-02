@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import random
+
 
 
 def get_masked(batch_size, shapes, missing_rate):
@@ -16,6 +18,18 @@ def get_masked(batch_size, shapes, missing_rate):
         mask = np.r_[[np.random.choice([0, 1], size=shape, p=[1-missing_rate, missing_rate]) for _ in range(batch_size)]]
         masks.append(torch.BoolTensor(mask))
     return masks
+
+
+def mask_view( Xs, mask_view_ratio, views):
+    batch_size = Xs[0].shape[0]
+    interval = batch_size // (mask_ratio * 100)
+    for i in range(batch_size):
+        if i % interval == 0:
+            v = random.randint(0, views - 1)
+            Xs[v][i] = torch.zeros(Xs[0].shape[1:])
+
+    return Xs
+
 
 
 def mask_image(img, patch_size=4, mask_ratio=0.5, return_img=True):

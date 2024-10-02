@@ -87,7 +87,7 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
         parameters = list(model.parameters())
     if args.verbose and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
         pbar = tqdm(total=len(train_dataloader)*args.views)
-    mask_ratio, mask_patch_size = args.train.masked_ratio, args.train.mask_patch_size
+    mask_ratio, mask_patch_size, mask_view_ratio = args.train.masked_ratio, args.train.mask_patch_size, args.train.mask_view_ratio
     # mask_patch_size = args.train.mask_patch_size
     # try dynamic mask_value
     # mask_ratio = get_masked_value(epoch, end_epoch=args.train.epochs)
@@ -95,9 +95,9 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
         Xs = [x.to(device) for x in Xs]
   
         if args.train.use_ddp:
-            loss, loss_parts = model.module.get_loss(Xs, epoch, mask_ratio, mask_patch_size)
+            loss, loss_parts = model.module.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view_ratio)
         else:
-            loss, loss_parts = model.get_loss(Xs, epoch, mask_ratio, mask_patch_size)
+            loss, loss_parts = model.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view_ratio)
 
         for k, v in loss_parts.items():
             losses[k].append(v)    
@@ -149,7 +149,7 @@ def main():
     running_loggers = {}
     for r in range(runtimes):
         seed = config.seed
-        sub_logger = defaultdict(list)
+        # sub_logger = defaultdict(list)
         
         checkpoint_path = os.path.join(result_dir, f'checkpoint-{seed}.pth')
         finalmodel_path = os.path.join(result_dir, f'final_model-{seed}.pth')
@@ -266,8 +266,8 @@ def main():
                 smartprint(f"[Training {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in losses.items()]))
             
             
-            for k, v in losses.items():
-                sub_logger[k].append(v)
+            # for k, v in losses.items():
+            #     sub_logger[k].append(v)
                 
             if scheduler is not None:
                 scheduler.step()
@@ -289,8 +289,8 @@ def main():
                     kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device)
                     
                     
-                    for k, v in kmeans_result.items():
-                        sub_logger[k].append(v)
+                    # for k, v in kmeans_result.items():
+                    #     sub_logger[k].append(v)
                         
                     print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
                     
@@ -305,7 +305,7 @@ def main():
                 dist.barrier()
         
         # update seed.        
-        running_loggers[f'r{r+1}-{seed}'] = sub_logger
+        # running_loggers[f'r{r+1}-{seed}'] = sub_logger
         # running_loggers[f'm-{mask_ratio}'] = sub_logger
                    
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
