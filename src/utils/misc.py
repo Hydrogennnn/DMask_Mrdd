@@ -20,7 +20,7 @@ def get_masked(batch_size, shapes, missing_rate):
     return masks
 
 
-def mask_view( Xs, mask_view_ratio, views):
+def mask_view(Xs, mask_ratio, views):
     batch_size = Xs[0].shape[0]
     interval = batch_size // (mask_ratio * 100)
     for i in range(batch_size):

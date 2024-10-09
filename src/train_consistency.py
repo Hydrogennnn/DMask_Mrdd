@@ -20,7 +20,7 @@ from utils.datatool import (get_val_transformations,
                       get_train_dataset,
                       get_val_dataset)
 from optimizer import get_optimizer, get_scheduler
-
+from utils.misc import mask_view
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
@@ -50,12 +50,15 @@ def smartprint(*msg):
         print(*msg)
 
 @torch.no_grad()
-def valid_by_kmeans(val_dataloader, model, use_ddp, device):
+def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     targets = []
     consist_reprs = []
 
     for Xs, target in val_dataloader:
+        # mask-view
+        Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
         Xs = [x.to(device) for x in Xs]
+
         if use_ddp:
             consist_repr_ = model.module.consistency_features(Xs)
         else:
@@ -87,7 +90,7 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
         parameters = list(model.parameters())
     if args.verbose and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
         pbar = tqdm(total=len(train_dataloader)*args.views)
-    mask_ratio, mask_patch_size, mask_view_ratio = args.train.masked_ratio, args.train.mask_patch_size, args.train.mask_view_ratio
+    mask_ratio, mask_patch_size, mask_view, mask_view_ratio = args.train.masked_ratio, args.train.mask_patch_size, args.train.mask_view, args.train.mask_view_ratio
     # mask_patch_size = args.train.mask_patch_size
     # try dynamic mask_value
     # mask_ratio = get_masked_value(epoch, end_epoch=args.train.epochs)
@@ -95,9 +98,9 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
         Xs = [x.to(device) for x in Xs]
   
         if args.train.use_ddp:
-            loss, loss_parts = model.module.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view_ratio)
+            loss, loss_parts = model.module.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view, mask_view_ratio)
         else:
-            loss, loss_parts = model.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view_ratio)
+            loss, loss_parts = model.get_loss(Xs, epoch, mask_ratio, mask_patch_size, mask_view, mask_view_ratio)
 
         for k, v in loss_parts.items():
             losses[k].append(v)    
@@ -286,7 +289,7 @@ def main():
                     
                     sample_grid = sampling(model, config.train.samples_num, device, use_ddp)
                     
-                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device)
+                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device, config)
                     
                     
                     # for k, v in kmeans_result.items():

@@ -20,7 +20,7 @@ from utils.datatool import (get_val_transformations,
                       get_train_dataset,
                       get_val_dataset)
 from optimizer import get_optimizer, get_scheduler
-
+from utils.misc import mask_view
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
@@ -50,12 +50,13 @@ def smartprint(*msg):
         print(*msg)
 
 @torch.no_grad()
-def valid_by_kmeans(val_dataloader, model, use_ddp, device):
+def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     targets = []
     consist_reprs = []
     vspecific_reprs = []
     concate_reprs = []
     for Xs, target in val_dataloader:
+        Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
         Xs = [x.to(device) for x in Xs]
         if use_ddp:
             consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)

@@ -4,6 +4,8 @@ from torch import nn
 from .consistency_models import ConsistencyAE
 from .specificity_models import ViewSpecificAE
 from .mi_estimators import CLUBSample
+from utils.misc import mask_view
+
 
 
 class MRDD(nn.Module):
@@ -142,6 +144,8 @@ class MRDD(nn.Module):
                 C = self.consis_enc.consistency_features(Xs) # without grad
         else:
             C = None
+        if self.args.train.mask_view:
+            Xs = mask_view(Xs, self.args.train.mask_view_ratio, self.args.views)
         return_details = {}
         losses = []
         for i in range(self.views):

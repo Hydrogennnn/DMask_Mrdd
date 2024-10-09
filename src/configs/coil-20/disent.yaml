@@ -29,6 +29,9 @@ train:
   masked_ratio: 0.7
   mask_patch_size: 4
 
+#  mask_view: true
+#  mask_view_ratio: 0.15
+
 
 consistency:
   continous: True

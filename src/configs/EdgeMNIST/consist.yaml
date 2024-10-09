@@ -16,7 +16,7 @@ dataset:
 train:
   epochs: 200
   # 64, 128, 512, 1024
-  devices: [0, 1]
+  devices: [0]
   batch_size: 512
   optim: "adamw"
   num_workers: 8
@@ -28,7 +28,9 @@ train:
   resume: false
   masked_ratio: 0.7
   mask_patch_size: 2
-  mask_view_ratio: 15
+#  mask_view: true
+#  mask_view_ratio: 0.15
+
 
 consistency:
   continous: True
