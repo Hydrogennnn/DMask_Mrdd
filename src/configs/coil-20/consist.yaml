@@ -17,13 +17,13 @@ dataset:
 train:
   epochs: 200
   # 64, 128, 512, 1024
-  devices: [0]
+  devices: [0, 1, 2]
   batch_size: 256
   optim: "adamw"
   num_workers: 8
   lr: 0.0005
   evaluate: 1
-  use_ddp: false
+  use_ddp: true
   scheduler: 'consine'
   samples_num: 8
   resume: false

@@ -22,11 +22,12 @@ def get_masked(batch_size, shapes, missing_rate):
 
 def mask_view(Xs, mask_ratio, views):
     batch_size = Xs[0].shape[0]
-    interval = batch_size // (mask_ratio * 100)
-    for i in range(batch_size):
-        if i % interval == 0:
-            v = random.randint(0, views - 1)
-            Xs[v][i] = torch.zeros(Xs[0].shape[1:])
+    num_to_select = int(batch_size*mask_ratio)
+    random_indices = random.sample(range(batch_size),num_to_select)
+
+    for i in random_indices:
+        v = random.randint(0, views - 1) #randomly select a view
+        Xs[v][i] = torch.zeros(Xs[0].shape[1:])
 
     return Xs
 
