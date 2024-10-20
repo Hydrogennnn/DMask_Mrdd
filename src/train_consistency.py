@@ -10,7 +10,7 @@ from tqdm import tqdm
 import numpy as np
 import torch.distributed as dist
 from torchinfo import summary
-
+from eval import classification_metric
 from configs.basic_config import get_cfg
 from models.consistency_models import ConsistencyAE
 from utils import (clustering_by_representation,
@@ -20,6 +20,8 @@ from utils.datatool import (get_val_transformations,
                       get_train_dataset,
                       get_val_dataset)
 from optimizer import get_optimizer, get_scheduler
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
 from utils.misc import mask_view
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
@@ -53,7 +55,7 @@ def smartprint(*msg):
 def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     targets = []
     consist_reprs = []
-
+    # Extract features
     for Xs, target in val_dataloader:
         Xs = [x.to(device) for x in Xs]
 
@@ -66,7 +68,7 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
         
     targets = torch.concat(targets, dim=-1).numpy()
     consist_reprs = torch.vstack(consist_reprs).detach().cpu().numpy()
-   
+    #Clustering
     result = {}
     acc, nmi, ari, _, p, fscore = clustering_by_representation(consist_reprs, targets)
     result['consist-acc'] = acc
@@ -75,7 +77,18 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     result['consist-p'] = p
     result['consist-fscore'] = fscore
 
+    # Classification
+    X_train, X_test, y_train, y_test = train_test_split(consist_reprs, targets, test_size=0.2)
+    svc = SVC()
+    svc.fit(X_train, y_train)
+    preds = svc.predict(X_test)
+    accuracy, precision, f_score = classification_metric(y_test, preds)
+    result['consist-cls_acc'] = accuracy
+    result['consist-cls_precision'] = precision
+    result['consist-cls_f_score'] = f_score
     return result
+
+
 
 
 def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
