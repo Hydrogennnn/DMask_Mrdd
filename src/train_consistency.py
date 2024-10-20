@@ -233,7 +233,7 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}--mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-{seed}')
+                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}--mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-{"modal missing"if config.train.val_mask_view else "full modal"}-{seed}')
             wandb.watch(model, log='all', log_graph=True, log_freq=15)
 
         # Start scan training.

@@ -1,6 +1,6 @@
 # general setting.
 views: 2
-seed: 3407
+seed: 8527
 wandb: true
 experiment_name: "emnist"
 verbose: false
@@ -16,7 +16,7 @@ dataset:
 train:
   epochs: 100
   # 64, 128, 512, 1024
-  devices: [0]
+  devices: [1]
   batch_size: 1024
   optim: "adamw"
   num_workers: 8
