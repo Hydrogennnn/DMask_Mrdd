@@ -366,7 +366,7 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        return [view0, view1], self.targets[idx]
+        return [[view0, view1], self.targets[idx]]
 
 
 class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
@@ -679,6 +679,7 @@ def get_train_dataset(args, transform):
     return train_set
 
 def get_mask_val(config, valset):
+    # print(type(valset[0]))
     file_path = os.path.join("./MaskView", config.dataset.name+".json")
     # Read the file
     assert os.path.exists(file_path)
@@ -686,8 +687,12 @@ def get_mask_val(config, valset):
         data = json.load(file)
         random_indices, random_views = data['indices'], data['views']
     for idx, v in zip(random_indices, random_views):
-        valset[idx][0][v] = torch.zeros(valset[idx][0][v].shape)
-    
+        # tmp = valset[idx][0][v].clone()
+        # zerotensor = torch.zeros(valset[idx][0][v].shape)
+        # print(type(valset[idx][0][v]))
+        # valset[idx][0][v].zero_()
+        # print(torch.count_nonzero(valset[idx][0][v]).item())
+        print(valset[idx][0][v].type())
     return valset
             
             
