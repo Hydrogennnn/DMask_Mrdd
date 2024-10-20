@@ -141,7 +141,10 @@ def main():
                                 shuffle=False,
                                 pin_memory=True,
                                 drop_last=False)
-    
+    for Xs,_ in val_dataloader:
+        if config.train.val_mask_view:
+            Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
+            
     run_times = 10
     n_clusters = config.dataset.class_num
     need_classification = False

@@ -1,7 +1,7 @@
 # general setting.
 views: 3
 seed: 3407
-wandb: false
+wandb: true
 experiment_name: "coil100"
 verbose: false
 note: 'mining consistency'
@@ -15,9 +15,9 @@ dataset:
   root: 'MyData'
   class_num: 100
 train:
-  epochs: 200
+  epochs: 100
   # 64, 128, 512, 1024
-  devices: [0, 1]
+  devices: [1]
   batch_size: 64
   optim: "adamw"
   num_workers: 8

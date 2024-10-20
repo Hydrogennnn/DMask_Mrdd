@@ -8,7 +8,7 @@ from yacs.config import CfgNode as CN
 _C = CN()
 
 # project name, for wandb's records. **Required**
-_C.project_name = 'CVPR24'
+_C.project_name = 'MRDD'
 # project description, what problem does this project tackle?
 _C.project_desc = 'cvpr new try.' 
 # seed
@@ -106,7 +106,9 @@ _C.train.use_ddp = True
 _C.train.masked_ratio = 0.6
 _C.train.mask_patch_size = 2
 _C.train.mask_view = True
-_C.train.mask_view_ratio = 0.15
+_C.train.val_mask_view = True
+_C.train.mask_view_ratio = 0.3
+_C.train.val_mask_view_ratio = 0.5
 
 # commom feature pooling method. mean, sum, or first
 _C.fusion = CN()

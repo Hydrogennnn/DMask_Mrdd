@@ -21,6 +21,7 @@ def get_masked(batch_size, shapes, missing_rate):
 
 
 def mask_view(Xs, mask_ratio, views):
+    # print('mask_view')
     batch_size = Xs[0].shape[0]
     num_to_select = int(batch_size*mask_ratio)
     random_indices = random.sample(range(batch_size),num_to_select)

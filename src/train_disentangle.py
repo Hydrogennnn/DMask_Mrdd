@@ -2,7 +2,7 @@ import argparse
 import os
 from collections import defaultdict
 from itertools import chain
-
+import time
 import torch
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
@@ -56,7 +56,8 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     vspecific_reprs = []
     concate_reprs = []
     for Xs, target in val_dataloader:
-        Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
+        if config.train.val_mask_view:
+            Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
         Xs = [x.to(device) for x in Xs]
         if use_ddp:
             consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)
@@ -103,8 +104,8 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
     if args.verbose and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
         pbar = tqdm(train_dataloader, ncols=0, unit=" batch")
         
-
-    for Xs, _ in train_dataloader:
+    for Xs, _ in tqdm(train_dataloader):
+        
         Xs = [x.to(device) for x in Xs]
         
         if args.train.use_ddp:
@@ -117,7 +118,7 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
             optimizer.zero_grad()
             loss[idx].backward()
             optimizer.step()
-            
+
         for k, v in loss_part.items():
             losses[k].append(v)  
            
@@ -145,7 +146,7 @@ def main():
     use_ddp = config.train.use_ddp
     seed = config.seed
     runtimes = config.runtimes
-    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}')
+    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}')
     os.makedirs(result_dir, exist_ok=True)
     
     
@@ -218,7 +219,6 @@ def main():
 
         start_epoch = 0
         model = model.to(device)
-            
         if use_ddp:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
@@ -230,7 +230,7 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}")
+                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}")
             wandb.watch(model, log='all', log_graph=True, log_freq=15)
         
         for epoch in range(start_epoch, config.train.epochs):
@@ -263,7 +263,7 @@ def main():
                     else:
                         model.eval()
                     
-                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device)
+                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device, config)
                     print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
                     
                         
@@ -271,18 +271,22 @@ def main():
                         wandb.log(kmeans_result, step=epoch)
                         
                         
-                rcons_grid = reconstruction(model, recon_samples, config.train.use_ddp)
-                sample_grid = sampling(model, config.train.samples_num, device, use_ddp)    
-                    
-                if use_wandb:
-                    wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
-                    wandb.log({'conditional-samples': wandb.Image(sample_grid)}, step=epoch)
+                # rcons_grid = reconstruction(model, recon_samples, config.train.use_ddp)
+                # sample_grid = sampling(model, config.train.samples_num, device, use_ddp)    
+                
+                # if use_wandb:
+                #     wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
+                #     wandb.log({'conditional-samples': wandb.Image(sample_grid)}, step=epoch)
                         
                 
                 # Checkpoint
                 # save_checkpoint(config, checkpoint_path, model, optimizer, scheduler, epoch)
+            start_time = time.time()
             if use_ddp:    
                 dist.barrier()
+            end_time = time.time()
+            if LOCAL_RANK==0 or LOCAL_RANK==-1:
+                print(f"Dist barrier time{end_time - start_time:.4f} seconds")
                 
         # update seed.        
         running_loggers[f'r{r+1}-{seed}'] = sub_logger
@@ -298,7 +302,8 @@ def main():
                 torch.save(model.state_dict(), finalmodel_path) 
                      
     if LOCAL_RANK == 0 or LOCAL_RANK == -1:            
-        torch.save(running_loggers, os.path.join(result_dir, 'loggers.pkl'))
+        torch.save(running_loggers, os.path.join(
+            result_dir, 'loggers.pkl'))
         
     if use_ddp:
         clean_distributed()

@@ -178,5 +178,3 @@ def clustering_by_representation(X_rep, y):
     if np.min(y) == 1:
         y = y - 1
     return clustering_metric(y, kmeans_assignments)
-          
- 

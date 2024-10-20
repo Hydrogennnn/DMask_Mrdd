@@ -55,8 +55,6 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     consist_reprs = []
 
     for Xs, target in val_dataloader:
-        # mask-view
-        Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
         Xs = [x.to(device) for x in Xs]
 
         if use_ddp:
@@ -94,7 +92,7 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizer, lr):
     # mask_patch_size = args.train.mask_patch_size
     # try dynamic mask_value
     # mask_ratio = get_masked_value(epoch, end_epoch=args.train.epochs)
-    for Xs, _ in train_dataloader:
+    for Xs, _ in tqdm(train_dataloader):
         Xs = [x.to(device) for x in Xs]
   
         if args.train.use_ddp:
@@ -135,7 +133,7 @@ def main():
     
     runtimes = config.runtimes
     evaluate_intervals = config.train.evaluate
-    result_dir = os.path.join(config.train.log_dir, f'consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}')
+    result_dir = os.path.join(config.train.log_dir, f'consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}')
     os.makedirs(result_dir, exist_ok=True)
     
     if use_ddp:
@@ -176,6 +174,7 @@ def main():
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
             val_dataset = get_val_dataset(config, val_transformations)
+
             val_dataloader = DataLoader(val_dataset,
                                         batch_size=config.train.batch_size // WORLD_SIZE,
                                         num_workers=config.train.num_workers,
@@ -234,7 +233,7 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}-{seed}')
+                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}--mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-{seed}')
             wandb.watch(model, log='all', log_graph=True, log_freq=15)
 
         # Start scan training.
@@ -280,7 +279,7 @@ def main():
                     
 
             if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-                if epoch % evaluate_intervals == 0:
+                if (epoch % evaluate_intervals == 0 or epoch + 10 >= config.train.epochs):
                     if config.train.use_ddp:
                         model.module.eval()
                     else:
@@ -298,9 +297,9 @@ def main():
                     print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
                     
                     if use_wandb:
-                        wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
+                        # wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
                         wandb.log(kmeans_result, step=epoch)
-                        wandb.log({'samples': wandb.Image(sample_grid)}, step=epoch)
+                        # wandb.log({'samples': wandb.Image(sample_grid)}, step=epoch)
                 
                 # Checkpoint
                 # save_checkpoint(config, checkpoint_path, model, optimizer, None, epoch)
@@ -325,10 +324,10 @@ def main():
                 # Save final model
                 torch.save(model.state_dict(), finalmodel_path)
                 
-                
-    if LOCAL_RANK == 0 or LOCAL_RANK == -1:            
-        torch.save(running_loggers, os.path.join(result_dir, 'loggers.pkl'))
-        plot_training_loggers(running_loggers, os.path.join(result_dir, 'train_logger.png'))
+    #training log
+    # if LOCAL_RANK == 0 or LOCAL_RANK == -1:            
+    #     torch.save(running_loggers, os.path.join(result_dir, 'loggers.pkl'))
+    #     plot_training_loggers(running_loggers, os.path.join(result_dir, 'train_logger.png'))
         
     if use_ddp:
         clean_distributed()

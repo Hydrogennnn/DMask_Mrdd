@@ -16,8 +16,8 @@ dataset:
 train:
   epochs: 200
   # 64, 128, 512, 1024
-  devices: [0, 1]
-  batch_size: 64
+  devices: [0, 1, 2]
+  batch_size: 1024
   optim: "adamw"
   num_workers: 8
   lr: 0.0005

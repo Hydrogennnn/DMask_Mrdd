@@ -1,7 +1,7 @@
 # general setting.
 views: 3
 seed: 3407
-wandb: false
+wandb: true
 experiment_name: "coil100"
 verbose: false
 project_name: 'CVPR24'
@@ -14,9 +14,9 @@ dataset:
   root: 'MyData'
   class_num: 100
 train:
-  epochs: 200
+  epochs: 100
   # 64, 128, 512, 1024
-  devices: [0, 1]
+  devices: [1]
   batch_size: 64
   optim: "adamw"
   num_workers: 8
@@ -42,7 +42,7 @@ consistency:
   num_res_blocks: 3
   kld_weight: 1.0
   alpha: 1.0
-  consistency_encoder_path: '4560.pth'
+  consistency_encoder_path: './experiments/coil100/consist-c10-m0.7-mv0.3/final_model-3407.pth'
 
 vspecific:
   v_dim: 10
