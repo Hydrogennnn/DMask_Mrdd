@@ -188,9 +188,9 @@ def main():
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
             if config.train.val_mask_view:
-                val_dataset = get_val_dataset(config, val_transformations)
-            else:
                 val_dataset = get_mask_val(config, val_transformations)
+            else:
+                val_dataset = get_val_dataset(config, val_transformations)
 
             # cnt = 0
             # for x,y in zip(val_dataset, t_val_dataset):
