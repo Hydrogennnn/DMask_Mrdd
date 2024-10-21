@@ -18,7 +18,8 @@ from utils import (clustering_by_representation,
                    plot_training_loggers, get_masked_value)
 from utils.datatool import (get_val_transformations,
                       get_train_dataset,
-                      get_val_dataset)
+                      get_val_dataset,
+                      get_mask_val)
 from optimizer import get_optimizer, get_scheduler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
@@ -186,8 +187,20 @@ def main():
                                     drop_last=True)
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-            val_dataset = get_val_dataset(config, val_transformations)
+            if config.train.val_mask_view:
+                val_dataset = get_val_dataset(config, val_transformations)
+            else:
+                val_dataset = get_mask_val(config, val_transformations)
 
+            # cnt = 0
+            # for x,y in zip(val_dataset, t_val_dataset):
+            #     for a,b in zip(x[0],y[0]):
+            #         print(torch.count_nonzero(a), torch.count_nonzero(b))
+            #         if torch.count_nonzero(b).item() == 0:
+            #             cnt+=1
+                # if not all(torch.equal(a,b) for a,b in zip(x[0],y[0])):
+                #     print("===============Reason=======")
+                # print(type(x))
             val_dataloader = DataLoader(val_dataset,
                                         batch_size=config.train.batch_size // WORLD_SIZE,
                                         num_workers=config.train.num_workers,

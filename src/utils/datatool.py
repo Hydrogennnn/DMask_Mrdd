@@ -347,9 +347,23 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
                  transform=None,
                  target_transform=None,
                  download=False,
-                 views=None) -> None:
+                 views=None,
+                 mask_view=False,
+                 random_indices=None,
+                 random_view=None
+                 ) -> None:
         super().__init__(root, train, transform, target_transform, download)
         self.to_tensor = transforms.ToTensor()
+
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for i in range(self.data.shape[0])]
+            self.random_views = [0 for i in range(self.data.shape[0])]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
+
+
 
     def __getitem__(self, idx):
 
@@ -360,22 +374,44 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
         view0 = img
         # edge-view transforms
         view1 = edge_transformation(img)
+
         if self.transform:
             view0 = self.transform(view0)
             view1 = self.transform(view1)
+        if self.mask_view and self.is_mask[idx]:
+            x = [view0, view1]
+            x[self.random_views[idx]].zero_()
 
         if self.target_transform is not None:
             target = self.target_transform(target)
         return [view0, view1], self.targets[idx]
 
 
+
+
+
+
 class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
 
     def __init__(self, root: str, train: bool = True,
                  transform=None,
-                 target_transform=None, download: bool = False, views=None) -> None:
+                 target_transform=None,
+                 download: bool = False,
+                 views=None,
+                 mask_view=False,
+                 random_indices=None,
+                 random_view=None
+                 ) -> None:
         super().__init__(root, train, transform, target_transform, download)
         self.to_tensor = transforms.ToTensor()
+
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for i in range(self.data.shape[0])]
+            self.random_views = [0 for i in range(self.data.shape[0])]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
 
     def __getitem__(self, idx):
         img = self.data[idx]
@@ -388,6 +424,10 @@ class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
         if self.transform:
             view0 = self.transform(view0)
             view1 = self.transform(view1)
+
+        if self.mask_view and self.is_mask[idx]:
+            x = [view0, view1]
+            x[self.random_views[idx]].zero_()
 
         if self.target_transform is not None:
             target = self.target_transform(target)
@@ -398,7 +438,13 @@ class COIL20Dataset(Dataset):
 
     def __init__(self, root: str, train: bool = True,
                  transform=None,
-                 target_transform=None, download: bool = False, views=2) -> None:
+                 target_transform=None,
+                 download: bool = False,
+                 views=2,
+                 mask_view=False,
+                 random_indices=None,
+                 random_view=None
+                 ) -> None:
 
         super().__init__()
         self.root = root
@@ -417,6 +463,14 @@ class COIL20Dataset(Dataset):
             self.data = X_test
             self.targets = torch.from_numpy(y_test).long()
 
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for _ in range(self.data.shape[1])]
+            self.random_views = [0 for _ in range(self.data.shape[1])]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
+
     def __getitem__(self, index):
         views = [np.transpose(self.data[view, index, :], (1, 2, 0))
                  for view in range(self.views)]
@@ -430,6 +484,9 @@ class COIL20Dataset(Dataset):
         if self.target_transform:
             target = self.target_transform(target)
 
+        if self.mask_view and self.is_mask[index]:
+            views[self.random_views[index]].zero_()
+
         return views, target
 
     def __len__(self) -> int:
@@ -440,7 +497,13 @@ class COIL100Dataset(Dataset):
     
     def __init__(self, root: str, train: bool = True,
                  transform=None,
-                 target_transform=None, download: bool = False, views=2) -> None:
+                 target_transform=None,
+                 download: bool = False,
+                 views=2,
+                 mask_view=False,
+                 random_indices=None,
+                 random_view=None
+                 ) -> None:
 
         super().__init__()
         self.root = root
@@ -459,6 +522,14 @@ class COIL100Dataset(Dataset):
             self.data = X_test
             self.targets = torch.from_numpy(y_test).long()
 
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for _ in range(self.data.shape[1])]
+            self.random_views = [0 for _ in range(self.data.shape[1])]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
+
     def __getitem__(self, index):
         views = [np.transpose(self.data[view, index, :], (1, 2, 0))
                  for view in range(self.views)]
@@ -472,6 +543,8 @@ class COIL100Dataset(Dataset):
         if self.target_transform:
             target = self.target_transform(target)
 
+        if self.mask_view and self.is_mask[index]:
+            views[self.random_views[index]].zero_()
         return views, target
 
     def __len__(self) -> int:
@@ -678,27 +751,29 @@ def get_train_dataset(args, transform):
 
     return train_set
 
-def get_mask_val(config, valset):
-    file_path = os.path.join("./MaskView", config.dataset.name+".json")
+def get_mask_val(args, transform):
+    # print(type(valset[0]))
+    file_path = os.path.join("./MaskView", args.dataset.name+".json")
     # Read the file
     assert os.path.exists(file_path)
     with open(file_path, "r") as file:
         data = json.load(file)
         random_indices, random_views = data['indices'], data['views']
-    for idx, v in zip(random_indices, random_views):
-        valset[idx][0][v] = torch.zeros(valset[idx][0][v].shape)
-    
-    return valset
-            
-            
+    data_class = __dataset_dict.get(args.dataset.name, None)
+    if data_class is None:
+        raise ValueError("Dataset name error.")
+    val_set = data_class(root=args.dataset.root, train=False,
+                         transform=transform, views=args.views,
+                         mask_view=True, random_indices=random_indices,
+                         random_view=random_views)
+    return val_set
+
 def get_val_dataset(args, transform):
     data_class = __dataset_dict.get(args.dataset.name, None)
     if data_class is None:
         raise ValueError("Dataset name error.")
     val_set = data_class(root=args.dataset.root, train=False,
                          transform=transform, views=args.views)
-    if args.train.val_mask_view:
-        return get_mask_val(args, val_set)
     return val_set
 
 

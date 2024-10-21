@@ -18,7 +18,8 @@ from utils import (clustering_by_representation,
                    reproducibility_setting, get_device, save_checkpoint)
 from utils.datatool import (get_val_transformations,
                       get_train_dataset,
-                      get_val_dataset)
+                      get_val_dataset,
+                      get_mask_val)
 from optimizer import get_optimizer, get_scheduler
 from utils.misc import mask_view
 
@@ -189,7 +190,10 @@ def main():
                                     drop_last=True)
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-            val_dataset = get_val_dataset(config, val_transformations)
+            if config.train.val_mask_view:
+                val_dataset = get_mask_val(config, val_transformations)
+            else:
+                val_dataset = get_val_dataset(config, val_transformations)
             val_dataloader = DataLoader(val_dataset,
                                         batch_size=config.train.batch_size // WORLD_SIZE,
                                         num_workers=config.train.num_workers,
@@ -230,7 +234,7 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}")
+                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{'modal missing' if config.train.val_mask_view else 'full modal'}")
             wandb.watch(model, log='all', log_graph=True, log_freq=15)
         
         for epoch in range(start_epoch, config.train.epochs):
