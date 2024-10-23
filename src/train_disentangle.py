@@ -145,7 +145,7 @@ def main():
     use_ddp = config.train.use_ddp
     seed = config.seed
     runtimes = config.runtimes
-    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}')
+    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{"modal missing"if config.train.val_mask_view else "full modal"}')
     os.makedirs(result_dir, exist_ok=True)
     
     

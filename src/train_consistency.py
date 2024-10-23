@@ -23,8 +23,6 @@ from utils.datatool import (get_val_transformations,
 from optimizer import get_optimizer, get_scheduler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
-from utils.misc import mask_view
-import copy
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
