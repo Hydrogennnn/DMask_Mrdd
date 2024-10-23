@@ -24,6 +24,7 @@ from optimizer import get_optimizer, get_scheduler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from utils.misc import mask_view
+import copy
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
@@ -59,7 +60,6 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     # Extract features
     for Xs, target in val_dataloader:
         Xs = [x.to(device) for x in Xs]
-
         if use_ddp:
             consist_repr_ = model.module.consistency_features(Xs)
         else:
@@ -174,7 +174,7 @@ def main():
 
         val_transformations = get_val_transformations(config)
         train_dataset = get_train_dataset(config, val_transformations)
-        
+
         if use_ddp:
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 train_dataset)
@@ -185,6 +185,8 @@ def main():
                                     shuffle=False if use_ddp else True,
                                     pin_memory=True,
                                     drop_last=True)
+
+
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
             if config.train.val_mask_view:

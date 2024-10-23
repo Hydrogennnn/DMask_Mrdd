@@ -57,8 +57,6 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     vspecific_reprs = []
     concate_reprs = []
     for Xs, target in val_dataloader:
-        if config.train.val_mask_view:
-            Xs = mask_view(Xs, config.train.mask_view_ratio, config.views)
         Xs = [x.to(device) for x in Xs]
         if use_ddp:
             consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)
