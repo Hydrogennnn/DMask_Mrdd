@@ -349,6 +349,8 @@ def main():
                 model.eval()
                 # Save final model
                 torch.save(model.state_dict(), finalmodel_path)
+
+        
                 
     #training log
     # if LOCAL_RANK == 0 or LOCAL_RANK == -1:            

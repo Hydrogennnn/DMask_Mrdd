@@ -13,17 +13,23 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 
 
-if __name__=='__main__':
-    cfg_path = "./configs/EdgeMNIST/consist.yaml"
-    model_path = "./experiments/emnist/final_model-3407.pth"
-    config = get_cfg(cfg_path)
+def valid(config, model_path):
     device = get_device(config, LOCAL_RANK)
     print(f"Use device:{device}")
     useddp = config.train.use_ddp
     seed = config.seed
     reproducibility_setting(seed)
     val_transformations = get_val_transformations(config)
+    result = valid_by_kmeans(val_dataloader, model, useddp, device, config)
+    for k, v in result.items():
+        print(f"{k}:{v},")
 
+
+
+if __name__=='__main__':
+    cfg_path = "./configs/EdgeMNIST/disent.yaml"
+    model_path = "./experiments/emnist/consist-c10-m0.7-mv0.3/final_model-3407.pth"
+    config = get_cfg(cfg_path)
     if config.train.val_mask_view:
         val_dataset = get_mask_val(config, val_transformations)
     else:
@@ -54,7 +60,4 @@ if __name__=='__main__':
     model.load_state_dict(torch.load(model_path, map_location="cpu"),
                           strict=False)
     model = model.to(device)
-    result = valid_by_kmeans(val_dataloader, model, useddp, device, config)
-    for k, v in result.items():
-        print(f"{k}:{v},")
-
+    valid(config, model_path)

@@ -271,24 +271,6 @@ def main():
                         
                     if use_wandb:
                         wandb.log(kmeans_result, step=epoch)
-                        
-                        
-                # rcons_grid = reconstruction(model, recon_samples, config.train.use_ddp)
-                # sample_grid = sampling(model, config.train.samples_num, device, use_ddp)    
-                
-                # if use_wandb:
-                #     wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
-                #     wandb.log({'conditional-samples': wandb.Image(sample_grid)}, step=epoch)
-                        
-                
-                # Checkpoint
-                # save_checkpoint(config, checkpoint_path, model, optimizer, scheduler, epoch)
-            start_time = time.time()
-            if use_ddp:    
-                dist.barrier()
-            end_time = time.time()
-            if LOCAL_RANK==0 or LOCAL_RANK==-1:
-                print(f"Dist barrier time{end_time - start_time:.4f} seconds")
                 
         # update seed.        
         running_loggers[f'r{r+1}-{seed}'] = sub_logger

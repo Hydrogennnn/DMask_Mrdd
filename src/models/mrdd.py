@@ -34,7 +34,7 @@ class MRDD(nn.Module):
             self.consis_enc.eval()
             if consistency_encoder_path is not None:
                 self.consis_enc.load_state_dict(torch.load(
-                    consistency_encoder_path, map_location='cpu'), strict=False)
+                    consistency_encoder_path, map_location='cpu'), strict=True)
                 # freeze consistency network.
                 for param in self.consis_enc.parameters():
                     param.requires_grad = False
