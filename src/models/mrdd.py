@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-
 from .consistency_models import ConsistencyAE
 from .specificity_models import ViewSpecificAE
 from .mi_estimators import CLUBSample
@@ -31,14 +30,16 @@ class MRDD(nn.Module):
                                             views=self.args.views,
                                             categorical_dim=self.args.dataset.class_num
                                             )
-            self.consis_enc.eval()
+            
+            
             if consistency_encoder_path is not None:
                 self.consis_enc.load_state_dict(torch.load(
-                    consistency_encoder_path, map_location='cpu'), strict=True)
+                    consistency_encoder_path, map_location='cpu'), strict=False)
                 # freeze consistency network.
                 for param in self.consis_enc.parameters():
                     param.requires_grad = False
             
+            self.consis_enc.eval()
             self.c_dim = self.args.consistency.c_dim
             self.v_dim = self.args.vspecific.v_dim
             
@@ -139,13 +140,16 @@ class MRDD(nn.Module):
         return tot_loss
     
     def get_loss(self, Xs):
+        # Mydebug(self, self.device, self.args)
+        if self.args.train.mask_view:
+            Xs = mask_view(Xs, self.args.train.mask_view_ratio, self.args.views)
+        
         if self.args.consistency.enable:
             with torch.no_grad():
                 C = self.consis_enc.consistency_features(Xs) # without grad
         else:
             C = None
-        if self.args.train.mask_view:
-            Xs = mask_view(Xs, self.args.train.mask_view_ratio, self.args.views)
+
         return_details = {}
         losses = []
         for i in range(self.views):
@@ -163,6 +167,7 @@ class MRDD(nn.Module):
             loss = (recons_loss + kld_loss + disent_loss)
             return_details[f'v{i+1}-total-loss'] = loss.item()
             losses.append(loss)
+            
             
         return losses, return_details
     

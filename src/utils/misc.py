@@ -28,7 +28,7 @@ def mask_view(Xs, mask_ratio, views):
 
     for i in random_indices:
         v = random.randint(0, views - 1) #randomly select a view
-        Xs[v][i] = torch.zeros(Xs[0].shape[1:])
+        Xs[v][i].zero_()
 
     return Xs
 

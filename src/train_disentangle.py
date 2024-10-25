@@ -11,7 +11,6 @@ import wandb
 from tqdm import tqdm
 import torch.distributed as dist
 from torchinfo import summary
-
 from configs.basic_config import get_cfg
 from models.mrdd import MRDD
 from utils import (clustering_by_representation,
@@ -21,7 +20,6 @@ from utils.datatool import (get_val_transformations,
                       get_val_dataset,
                       get_mask_val)
 from optimizer import get_optimizer, get_scheduler
-from utils.misc import mask_view
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
@@ -51,7 +49,7 @@ def smartprint(*msg):
         print(*msg)
 
 @torch.no_grad()
-def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
+def valid_by_kmeans(val_dataloader, model, use_ddp, device):
     targets = []
     consist_reprs = []
     vspecific_reprs = []
@@ -96,10 +94,13 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
 
 def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
     losses = defaultdict(list)
+
     if args.train.use_ddp:
         model.module.train()
+        model.module.consis_enc.eval()
     else:
         model.train()
+        model.consis_enc.eval()
     if args.verbose and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
         pbar = tqdm(train_dataloader, ncols=0, unit=" batch")
         
@@ -111,7 +112,6 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
             loss, loss_part = model.module.get_loss(Xs)
         else:
             loss, loss_part = model.get_loss(Xs)
-            
         for idx in range(len(loss)):  
             optimizer = optimizers[idx]
             optimizer.zero_grad()
@@ -120,8 +120,6 @@ def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
 
         for k, v in loss_part.items():
             losses[k].append(v)  
-           
-
         
         show_losses = {k: np.mean(v) for k, v in losses.items()}
         
@@ -198,7 +196,7 @@ def main():
                                         shuffle=False,
                                         drop_last=False,
                                         pin_memory=True)
-            print('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
+            smartprint('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
         
             dl = DataLoader(val_dataset, 16, shuffle=True)
             recon_samples = next(iter(dl))[0]
@@ -221,6 +219,7 @@ def main():
 
         start_epoch = 0
         model = model.to(device)
+
         if use_ddp:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
@@ -243,7 +242,6 @@ def main():
             if use_ddp:
                 train_dataloader.sampler.set_epoch(epoch)
             losses = train_a_epoch(config, train_dataloader, model, epoch, device, optimizers, lr)
-            
             if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
                 wandb.log(losses, step=epoch)
                     
@@ -265,7 +263,7 @@ def main():
                     else:
                         model.eval()
                     
-                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device, config)
+                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device)
                     print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
                     
                         

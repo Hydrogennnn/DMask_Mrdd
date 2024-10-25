@@ -1,7 +1,6 @@
 import argparse
 import os
 from collections import defaultdict
-
 import torch
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
@@ -23,6 +22,8 @@ from utils.datatool import (get_val_transformations,
 from optimizer import get_optimizer, get_scheduler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
+
+from consist_eval import Myvalid
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
@@ -274,21 +275,24 @@ def main():
                 train_dataloader.sampler.set_epoch(epoch)
             losses, cur_loss = train_a_epoch(config, train_dataloader, model, epoch, device, optimizer, lr)
             
+            
             if cur_loss <= best_loss:
-                        best_loss = cur_loss
-                        best_model_path = os.path.join(result_dir, f'best-{int(best_loss)}-{epoch}-{seed}.pth')
-                        if old_best_model_path:
-                            # save storage.
-                            os.remove(old_best_model_path)
-                        old_best_model_path = best_model_path
-                        if config.train.use_ddp:
-                            model.module.eval()
-                            # Save final model
-                            torch.save(model.module.state_dict(), best_model_path) 
-                        else:
-                            model.eval()
-                            # Save final model
-                            torch.save(model.state_dict(), best_model_path)
+                best_loss = cur_loss
+                best_model_path = os.path.join(result_dir, f'best-{int(best_loss)}-{epoch}-{seed}.pth')
+                if old_best_model_path:
+                    os.remove(old_best_model_path)
+                old_best_model_path = best_model_path
+                if config.train.use_ddp:
+                    model.module.eval()
+                    torch.save(model.module.state_dict(), best_model_path) 
+                else:
+                    model.eval()
+                    torch.save(model.state_dict(), best_model_path)
+
+                Myvalid(config=config, model_path=best_model_path, val_dataloader=val_dataloader)
+                        
+
+                        
             
             if not config.verbose:
                 smartprint(f"[Training {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in losses.items()]))
