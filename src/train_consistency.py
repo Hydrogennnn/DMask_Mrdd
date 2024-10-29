@@ -23,8 +23,6 @@ from optimizer import get_optimizer, get_scheduler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
-from consist_eval import Myvalid
-
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
@@ -288,8 +286,6 @@ def main():
                 else:
                     model.eval()
                     torch.save(model.state_dict(), best_model_path)
-
-                Myvalid(config=config, model_path=best_model_path, val_dataloader=val_dataloader)
                         
 
                         
