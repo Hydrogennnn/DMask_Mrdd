@@ -48,26 +48,77 @@ def smartprint(*msg):
     if LOCAL_RANK == 0 or LOCAL_RANK == -1:
         print(*msg)
 
+# @torch.no_grad()
+# def valid_by_kmeans(val_dataloader, model, use_ddp, device):
+#     targets = []
+#     consist_reprs = []
+#     vspecific_reprs = []
+#     concate_reprs = []
+#     for Xs, target in val_dataloader:
+#         Xs = [x.to(device) for x in Xs]
+#         if use_ddp:
+#             consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)
+#         else:
+#             consist_repr_, vspecific_repr_, concate_repr_, _ = model.all_features(Xs)
+#         targets.append(target)
+#         consist_reprs.append(consist_repr_.detach().cpu())
+#         vspecific_reprs.append(vspecific_repr_.detach().cpu())
+#         concate_reprs.append(concate_repr_.detach().cpu())
+#     targets = torch.concat(targets, dim=-1).numpy()
+#     consist_reprs = torch.vstack(consist_reprs).detach().cpu().numpy()
+#     vspecific_reprs = torch.vstack(vspecific_reprs).detach().cpu().numpy()
+#     concate_reprs = torch.vstack(concate_reprs).detach().cpu().numpy()
+#     result = {}
+#     acc, nmi, ari, _, p, fscore = clustering_by_representation(consist_reprs, targets)
+#     result['consist-acc'] = acc
+#     result['consist-nmi'] = nmi
+#     result['consist-ari'] = ari
+#     result['consist-p'] = p
+#     result['consist-fscore'] = fscore
+#
+#     acc, nmi, ari, _, p, fscore = clustering_by_representation(vspecific_reprs, targets)
+#     result['vspec-acc'] = acc
+#     result['vspec-nmi'] = nmi
+#     result['vspec-ari'] = ari
+#     result['vspec-p'] = p
+#     result['vspec-fscore'] = fscore
+#
+#     acc, nmi, ari, _, p, fscore = clustering_by_representation(concate_reprs, targets)
+#     result['cat-acc'] = acc
+#     result['cat-nmi'] = nmi
+#     result['cat-ari'] = ari
+#     result['cat-p'] = p
+#     result['cat-fscore'] = fscore
+#     return result
 @torch.no_grad()
-def valid_by_kmeans(val_dataloader, model, use_ddp, device):
+def valid_by_kmeans(val_dataloader, model, use_ddp, device, noise=False):
     targets = []
     consist_reprs = []
-    vspecific_reprs = []
-    concate_reprs = []
+    vspecific_reprs = defaultdict(list)
+    concate_reprs = defaultdict(list)
     for Xs, target in val_dataloader:
-        Xs = [x.to(device) for x in Xs]
-        if use_ddp:
-            consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)
+        if noise:
+            Xs = [torch.clip(x+torch.randn_like(x), 0, 1).to(device) for x in Xs]
         else:
-            consist_repr_, vspecific_repr_, concate_repr_, _ = model.all_features(Xs)
+            # print(Xs[0].shape)
+            Xs = [x.to(device) for x in Xs]
+        if use_ddp:
+            consist_repr_, vspecific_repr_, concate_repr_ = model.module.all_features(Xs)
+        else:
+            consist_repr_, vspecific_repr_, concate_repr_ = model.all_features(Xs)   # Tensor, list, list
+
         targets.append(target)
         consist_reprs.append(consist_repr_.detach().cpu())
-        vspecific_reprs.append(vspecific_repr_.detach().cpu())
-        concate_reprs.append(concate_repr_.detach().cpu())
+        # vspecific_reprs.append(vspecific_repr_.detach().cpu())
+        # concate_reprs.append(concate_repr_.detach().cpu())
+        for i, (si, c_si) in enumerate(zip(vspecific_repr_, concate_repr_)):
+            vspecific_reprs[f"s{i}"].append(si.detach().cpu())
+            concate_reprs[f"c+s{i}"].append(c_si.detach().cpu())
+
     targets = torch.concat(targets, dim=-1).numpy()
     consist_reprs = torch.vstack(consist_reprs).detach().cpu().numpy()
-    vspecific_reprs = torch.vstack(vspecific_reprs).detach().cpu().numpy()
-    concate_reprs = torch.vstack(concate_reprs).detach().cpu().numpy()
+    # vspecific_reprs = torch.vstack(vspecific_reprs).detach().cpu().numpy()
+    # concate_reprs = torch.vstack(concate_reprs).detach().cpu().numpy()
     result = {}
     acc, nmi, ari, _, p, fscore = clustering_by_representation(consist_reprs, targets)
     result['consist-acc'] = acc
@@ -75,22 +126,24 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device):
     result['consist-ari'] = ari
     result['consist-p'] = p
     result['consist-fscore'] = fscore
-    
-    acc, nmi, ari, _, p, fscore = clustering_by_representation(vspecific_reprs, targets)
-    result['vspec-acc'] = acc
-    result['vspec-nmi'] = nmi
-    result['vspec-ari'] = ari
-    result['vspec-p'] = p
-    result['vspec-fscore'] = fscore
-    
-    acc, nmi, ari, _, p, fscore = clustering_by_representation(concate_reprs, targets)
-    result['cat-acc'] = acc
-    result['cat-nmi'] = nmi
-    result['cat-ari'] = ari
-    result['cat-p'] = p
-    result['cat-fscore'] = fscore
-    return result
 
+    for key, spe_repr in vspecific_reprs.items():
+        spe_repr = torch.vstack(spe_repr).detach().cpu().numpy()
+        acc, nmi, ari, _, p, fscore = clustering_by_representation(spe_repr, targets)
+        result[f'{key}-acc'] = acc
+        result[f'{key}-nmi'] = nmi
+        result[f'{key}-ari'] = ari
+        result[f'{key}-p'] = p
+        result[f'{key}-fscore'] = fscore
+    for key, cat_repr in concate_reprs.items():
+        cat_repr = torch.vstack(cat_repr).detach().cpu().numpy()
+        acc, nmi, ari, _, p, fscore = clustering_by_representation(cat_repr, targets)
+        result[f'{key}-acc'] = acc
+        result[f'{key}-nmi'] = nmi
+        result[f'{key}-ari'] = ari
+        result[f'{key}-p'] = p
+        result[f'{key}-fscore'] = fscore
+    return result
 
 def train_a_epoch(args, train_dataloader, model, epoch, device, optimizers, lr):
     losses = defaultdict(list)
@@ -143,7 +196,7 @@ def main():
     use_ddp = config.train.use_ddp
     seed = config.seed
     runtimes = config.runtimes
-    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{"modal missing"if config.train.val_mask_view else "full modal"}')
+    result_dir = os.path.join(config.train.log_dir, f'disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{seed}')
     os.makedirs(result_dir, exist_ok=True)
     
     
@@ -186,16 +239,22 @@ def main():
                                     drop_last=True)
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-            if config.train.val_mask_view:
-                val_dataset = get_mask_val(config, val_transformations)
-            else:
-                val_dataset = get_val_dataset(config, val_transformations)
+
+            mask_val_dataset = get_mask_val(config, val_transformations)
+            mask_val_dataloader = DataLoader(mask_val_dataloader,
+                                             batch_size=config.train.batch_size // WORLD_SIZE,
+                                             num_workers=config.train.num_workers,
+                                             shuffle=False,
+                                             drop_last=False,
+                                             pin_memory=True)
+            val_dataset = get_val_dataset(config, val_transformations)
             val_dataloader = DataLoader(val_dataset,
                                         batch_size=config.train.batch_size // WORLD_SIZE,
                                         num_workers=config.train.num_workers,
                                         shuffle=False,
                                         drop_last=False,
                                         pin_memory=True)
+
             smartprint('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
         
             dl = DataLoader(val_dataset, 16, shuffle=True)
@@ -231,8 +290,8 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{'modal missing' if config.train.val_mask_view else 'full modal'}")
-            wandb.watch(model, log='all', log_graph=True, log_freq=15)
+                    name=f"{config.experiment_name}-disent-m{config.train.masked_ratio}-mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-c{config.consistency.c_dim}-v{config.vspecific.v_dim}-{seed}")
+            # wandb.watch(model, log='all', log_graph=True, log_freq=15)
         
         for epoch in range(start_epoch, config.train.epochs):
 
@@ -262,9 +321,39 @@ def main():
                         model.module.eval()
                     else:
                         model.eval()
-                    
-                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device)
-                    print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+
+                        # validate on full modal
+                        kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+                                                        model=model,
+                                                        device=device,
+                                                        use_ddp=use_ddp)
+                        print(f"[Evaluation {epoch}/{config.train.epochs}]",
+                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                        if use_wandb:
+                            wandb.log(kmeans_result, step=epoch)
+
+                        # validate on modal missing
+                        kmeans_result = valid_by_kmeans(val_dataloader=mask_val_dataloader,
+                                                        model=model,
+                                                        device=device,
+                                                        use_ddp=use_ddp)
+                        print(f"[Modal missing]",
+                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                        if use_wandb:
+                            for k, v in kmeans_result.items():
+                                wandb.log({k + "(modal missing)": v}, step=epoch)
+
+                        # validate on full modal with Gaussian Noise
+                        kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+                                                        model=model,
+                                                        device=device,
+                                                        use_ddp=use_ddp,
+                                                        noise=True)
+                        print(f"[Data with Noise]",
+                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                        if use_wandb:
+                            for k, v in kmeans_result.items():
+                                wandb.log({k + "(with noise)": v}, step=epoch)
                     
                         
                     if use_wandb:
@@ -281,7 +370,9 @@ def main():
             else:
                 model.eval()
                 # Save final model
-                torch.save(model.state_dict(), finalmodel_path) 
+                torch.save(model.state_dict(), finalmodel_path)
+
+
                      
     if LOCAL_RANK == 0 or LOCAL_RANK == -1:            
         torch.save(running_loggers, os.path.join(

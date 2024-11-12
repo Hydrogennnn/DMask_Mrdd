@@ -243,7 +243,7 @@ class MRDD(nn.Module):
         else:
             V = torch.zeros(batch, self.v_dim).to(self.device)
             all_V = V
-        return C, V, torch.cat([C, V], dim=-1), all_V
+        return C, vspecific_features, [torch.cat([C, v], dim=-1) for v in vspecific_features], all_V
 
     @torch.no_grad()
     def consistency_features(self, Xs):

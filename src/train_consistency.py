@@ -51,12 +51,16 @@ def smartprint(*msg):
         print(*msg)
 
 @torch.no_grad()
-def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
+def valid_by_kmeans(val_dataloader, model, use_ddp, device, noise=False):
     targets = []
     consist_reprs = []
     # Extract features
     for Xs, target in val_dataloader:
-        Xs = [x.to(device) for x in Xs]
+        if noise:
+            Xs = [torch.clip(x + torch.randn_like(x), 0, 1).to(device) for x in Xs]
+        else:
+            # print(Xs[0].shape)
+            Xs = [x.to(device) for x in Xs]
         if use_ddp:
             consist_repr_ = model.module.consistency_features(Xs)
         else:
@@ -76,14 +80,14 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, config):
     result['consist-fscore'] = fscore
 
     # Classification
-    X_train, X_test, y_train, y_test = train_test_split(consist_reprs, targets, test_size=0.2)
-    svc = SVC()
-    svc.fit(X_train, y_train)
-    preds = svc.predict(X_test)
-    accuracy, precision, f_score = classification_metric(y_test, preds)
-    result['consist-cls_acc'] = accuracy
-    result['consist-cls_precision'] = precision
-    result['consist-cls_f_score'] = f_score
+    # X_train, X_test, y_train, y_test = train_test_split(consist_reprs, targets, test_size=0.2)
+    # svc = SVC()
+    # svc.fit(X_train, y_train)
+    # preds = svc.predict(X_test)
+    # accuracy, precision, f_score = classification_metric(y_test, preds)
+    # result['consist-cls_acc'] = accuracy
+    # result['consist-cls_precision'] = precision
+    # result['consist-cls_f_score'] = f_score
     return result
 
 
@@ -186,10 +190,20 @@ def main():
 
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-            if config.train.val_mask_view:
-                val_dataset = get_mask_val(config, val_transformations)
-            else:
-                val_dataset = get_val_dataset(config, val_transformations)
+            mask_val_dataset = get_mask_val(config, val_transformations)
+            mask_val_dataloader = DataLoader(mask_val_dataloader,
+                                             batch_size=config.train.batch_size // WORLD_SIZE,
+                                             num_workers=config.train.num_workers,
+                                             shuffle=False,
+                                             drop_last=False,
+                                             pin_memory=True)
+            val_dataset = get_val_dataset(config, val_transformations)
+            val_dataloader = DataLoader(val_dataset,
+                                        batch_size=config.train.batch_size // WORLD_SIZE,
+                                        num_workers=config.train.num_workers,
+                                        shuffle=False,
+                                        drop_last=False,
+                                        pin_memory=True)
 
             # cnt = 0
             # for x,y in zip(val_dataset, t_val_dataset):
@@ -258,8 +272,8 @@ def main():
         
         if use_wandb and (LOCAL_RANK == 0 or LOCAL_RANK == -1):
             wandb.init(project=config.project_name, config=config,
-                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}--mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-{"modal missing"if config.train.val_mask_view else "full modal"}-{seed}')
-            wandb.watch(model, log='all', log_graph=True, log_freq=15)
+                    name=f'{config.experiment_name}-consist-c{config.consistency.c_dim}-m{config.train.masked_ratio}--mv{config.train.mask_view_ratio if config.train.mask_view else 0.0}-{seed}')
+            # wandb.watch(model, log='all', log_graph=True, log_freq=15)
 
         # Start scan training.
         best_loss = np.inf
@@ -310,17 +324,47 @@ def main():
                         model.module.eval()
                     else:
                         model.eval()
-                    rcons_grid = reconstruction(model, recon_samples, config.train.use_ddp)
-                    
-                    sample_grid = sampling(model, config.train.samples_num, device, use_ddp)
-                    
-                    kmeans_result = valid_by_kmeans(val_dataloader, model, use_ddp, device, config)
+                    # rcons_grid = reconstruction(model, recon_samples, config.train.use_ddp)
+                    #
+                    # sample_grid = sampling(model, config.train.samples_num, device, use_ddp)
+
+                    # validate on full modal
+                    kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+                                                    model=model,
+                                                    device=device,
+                                                    use_ddp=use_ddp)
+                    print(f"[Evaluation {epoch}/{config.train.epochs}]",
+                          ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                    if use_wandb:
+                        wandb.log(kmeans_result, step=epoch)
+
+                    # validate on modal missing
+                    kmeans_result = valid_by_kmeans(val_dataloader=mask_val_dataloader,
+                                                    model=model,
+                                                    device=device,
+                                                    use_ddp=use_ddp)
+                    print(f"[Modal missing]",
+                          ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                    if use_wandb:
+                        for k, v in kmeans_result.items():
+                            wandb.log({k + "(modal missing)": v}, step=epoch)
+
+                    # validate on full modal with Gaussian Noise
+                    kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+                                                    model=model,
+                                                    device=device,
+                                                    use_ddp=use_ddp,
+                                                    noise=True)
+                    print(f"[Data with Noise]",
+                          ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+                    if use_wandb:
+                        for k, v in kmeans_result.items():
+                            wandb.log({k + "(with noise)": v}, step=epoch)
                     
                     
                     # for k, v in kmeans_result.items():
                     #     sub_logger[k].append(v)
-                        
-                    print(f"[Evaluation {epoch}/{config.train.epochs}]", ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+
                     
                     if use_wandb:
                         # wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
