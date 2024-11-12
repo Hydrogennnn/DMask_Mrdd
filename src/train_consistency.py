@@ -360,10 +360,10 @@ def main():
                     #     sub_logger[k].append(v)
 
                     
-                    if use_wandb:
-                        # wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
-                        wandb.log(kmeans_result, step=epoch)
-                        # wandb.log({'samples': wandb.Image(sample_grid)}, step=epoch)
+                    # if use_wandb:
+                    #     # wandb.log({'rcons-grid': wandb.Image(rcons_grid)}, step=epoch)
+                    #     wandb.log(kmeans_result, step=epoch)
+                    #     # wandb.log({'samples': wandb.Image(sample_grid)}, step=epoch)
                 
                 # Checkpoint
                 # save_checkpoint(config, checkpoint_path, model, optimizer, None, epoch)
