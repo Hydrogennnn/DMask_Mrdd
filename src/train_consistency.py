@@ -191,7 +191,7 @@ def main():
         # Only evaluation at the first device.
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
             mask_val_dataset = get_mask_val(config, val_transformations)
-            mask_val_dataloader = DataLoader(mask_val_dataloader,
+            mask_val_dataloader = DataLoader(mask_val_dataset,
                                              batch_size=config.train.batch_size // WORLD_SIZE,
                                              num_workers=config.train.num_workers,
                                              shuffle=False,
@@ -214,12 +214,6 @@ def main():
                 # if not all(torch.equal(a,b) for a,b in zip(x[0],y[0])):
                 #     print("===============Reason=======")
                 # print(type(x))
-            val_dataloader = DataLoader(val_dataset,
-                                        batch_size=config.train.batch_size // WORLD_SIZE,
-                                        num_workers=config.train.num_workers,
-                                        shuffle=False,
-                                        drop_last=False,
-                                        pin_memory=True)
             print('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
         
             dl = DataLoader(val_dataset, 16, shuffle=True)

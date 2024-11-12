@@ -241,7 +241,7 @@ def main():
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
 
             mask_val_dataset = get_mask_val(config, val_transformations)
-            mask_val_dataloader = DataLoader(mask_val_dataloader,
+            mask_val_dataloader = DataLoader(mask_val_dataset,
                                              batch_size=config.train.batch_size // WORLD_SIZE,
                                              num_workers=config.train.num_workers,
                                              shuffle=False,
