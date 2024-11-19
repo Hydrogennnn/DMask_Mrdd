@@ -39,9 +39,7 @@ if __name__=="__main__":
         file_path = os.path.join(res_dir, config.dataset.name+".json")
         with open(file_path, "w") as file:
             json.dump({'indices':random_indices, 'views':random_views}, file)
-        
 
-            
         
         
             

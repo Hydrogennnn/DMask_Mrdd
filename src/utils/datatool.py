@@ -1,4 +1,3 @@
-
 import torchvision.transforms as transforms
 import torchvision
 from torch.utils.data import Dataset
@@ -9,6 +8,7 @@ from PIL import Image
 import os
 import json
 import cv2
+
 # provent the depandency of multiple threads.
 cv2.ocl.setUseOpenCL(False)
 cv2.setNumThreads(0)
@@ -28,10 +28,10 @@ def plain_transforms(img):
 
 def coil(root, n_objs=20, n_views=3):
     """
-    Download: 
+    Download:
     https://www.cs.columbia.edu/CAVE/software/softlib/coil-20.php
 
-    1. coil-20: 
+    1. coil-20:
     http://www.cs.columbia.edu/CAVE/databases/SLAM_coil-20_coil-100/coil-20/coil-20-unproc.zip
 
 
@@ -80,14 +80,14 @@ def coil(root, n_objs=20, n_views=3):
             views.append(np.array(obj_list))
         views = np.array(views)
         views = np.transpose(views, (1, 0, 2, 3, 4, 5)
-                            ).reshape(n_views, n, *img_size)
+                             ).reshape(n_views, n, *img_size)
         cp = views.reshape(-1, *img_size)
         # print(cp.shape)
         # print(cp[:, 0, :].mean(), cp[:, 0, :].std())
         labels = np.array(labels)
         X_train_idx, X_test_idx, y_train, y_test = train_test_split(
             list(range(n)), labels, test_size=0.2, random_state=42)
-        X_train, X_test = views[:, X_train_idx, :, :, :], views[:, X_test_idx, :, :, :] 
+        X_train, X_test = views[:, X_train_idx, :, :, :], views[:, X_test_idx, :, :, :]
         # torch.save((X_train, X_test, y_train, y_test), os.path.join(root, f"coil-{n_objs}/{n_views}v-cache.pth"))
         # print('save cahce.')
         return X_train, X_test, y_train, y_test
@@ -160,7 +160,7 @@ def generate_tiny_dataset(name, dataset, sample_num=100):
     for _ in y:
         idx = dataset.targets == _
         x1, x2, yy = dataset.data[0][idx,
-                                     :], dataset.data[1][idx, :], dataset.targets[idx]
+                     :], dataset.data[1][idx, :], dataset.targets[idx]
         x1, x2, yy = x1[:sample_num], x2[:sample_num], yy[:sample_num]
         x1s.append(x1)
         x2s.append(x2)
@@ -196,15 +196,15 @@ def align_office31(root):
     from torchvision.utils import save_image
     from sklearn.model_selection import train_test_split
     import json
-    
+
     def padding_images(transform, image_dir, max_num):
         if len(image_dir) == max_num:
             return None
         index = torch.arange(len(image_dir))
-        repeat_time = (max_num // len(image_dir))+1
+        repeat_time = (max_num // len(image_dir)) + 1
         index = index.repeat(repeat_time)
 
-        for n, idx in enumerate(index[:max_num-len(image_dir)]):
+        for n, idx in enumerate(index[:max_num - len(image_dir)]):
             img_path = image_dir[idx]
             new_path = f"{img_path[:-4]}_jitter_{n}.jpg"
             image = pil_loader(img_path)
@@ -231,7 +231,7 @@ def align_office31(root):
             transforms.ToTensor()
         ]
     )
-    
+
     for c in tqdm(classes):
         item_A = glob(f"{root}/{views_mapping['A']}/{c}/*.jpg")
         item_D = glob(f"{root}/{views_mapping['D']}/{c}/*.jpg")
@@ -241,39 +241,39 @@ def align_office31(root):
         padding_images(jitter, item_A, max_num)
         padding_images(jitter, item_D, max_num)
         padding_images(jitter, item_W, max_num)
-    
+
     A_path = []
     D_path = []
     W_path = []
     targets = []
-    # split into train set and test set.    
+    # split into train set and test set.
     for idx, c in enumerate(classes):
         item_A = glob(f"{root}/{views_mapping['A']}/{c}/*.jpg")
         item_D = glob(f"{root}/{views_mapping['D']}/{c}/*.jpg")
         item_W = glob(f"{root}/{views_mapping['W']}/{c}/*.jpg")
-        
+
         A_path += [p[len(root):] for p in item_A]
         D_path += [p[len(root):] for p in item_D]
         W_path += [p[len(root):] for p in item_W]
         targets += ([idx] * len(item_A))
-        
+
     X = np.c_[[A_path, D_path, W_path]].T
     Y = np.array(targets)
-    
+
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
-    
+
     train = []
     for (a, d, w), y in zip(X_train, y_train):
         train.append((a, d, w, int(y)))
-        
+
     test = []
     for (a, d, w), y in zip(X_test, y_test):
         test.append((a, d, w, int(y)))
-        
+
     json.dump(train, open(f'{root}/train.json', 'w'))
     json.dump(test, open(f'{root}/test.json', 'w'))
-    
-    
+
+
 def generate_mvc_dataset(root, views):
     from collections import Counter
     from sklearn.model_selection import train_test_split
@@ -301,16 +301,16 @@ def generate_mvc_dataset(root, views):
     obj = {'train': (X_train, y_train), 'test': (X_test, y_test)}
     torch.save(obj, os.path.join(root, f'{views}V-indices.pth'))
     print(X_train.shape, X_test.shape)
-        
+
 
 def generate_deepfake_dataset(root):
     import os
     from sklearn.model_selection import train_test_split
-    sub_folders = ['original_sequences/youtube','manipulated_sequences/Deepfakes', 'manipulated_sequences/Face2Face', 
-                    'manipulated_sequences/FaceSwap', 'manipulated_sequences/NeuralTextures']
+    sub_folders = ['original_sequences/youtube', 'manipulated_sequences/Deepfakes', 'manipulated_sequences/Face2Face',
+                   'manipulated_sequences/FaceSwap', 'manipulated_sequences/NeuralTextures']
 
     views = 2
-    
+
     total = []
     targets = []
     for target, sf in enumerate(sub_folders):
@@ -318,7 +318,7 @@ def generate_deepfake_dataset(root):
         for l in files:
             pngs = os.listdir(os.path.join(root, sf, 'c23', 'frames', l))
             samples = len(pngs) // views
-            idx = [[v+(s*views) for v in range(views)] for s in range(samples)]
+            idx = [[v + (s * views) for v in range(views)] for s in range(samples)]
             for item in idx:
                 total.append([os.path.join(sf, 'c23', 'frames', l, pngs[i]) for i in item])
                 targets.append(target)
@@ -330,7 +330,8 @@ def generate_deepfake_dataset(root):
     print(f"train set: {X_train.shape}, target: {y_train.shape}")
     print(f"test set: {X_test.shape}, target: {y_test.shape}")
     torch.save({'data': X_train, 'targets': y_train}, f"./data/ffdataset/view-{views}-train.idx")
-    torch.save({'data': X_test, 'targets': y_test}, f"./data/ffdataset/view-{views}-test.idx")   
+    torch.save({'data': X_test, 'targets': y_test}, f"./data/ffdataset/view-{views}-test.idx")
+
 
 # -------------------------------------------------------------------------------
 #                      Dataset Area.
@@ -363,8 +364,6 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
                 self.is_mask[idx] = True
                 self.random_views[idx] = v
 
-
-
     def __getitem__(self, idx):
 
         img = self.data[idx]
@@ -385,10 +384,6 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
         if self.target_transform is not None:
             target = self.target_transform(target)
         return [view0, view1], self.targets[idx]
-
-
-
-
 
 
 class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
@@ -491,10 +486,10 @@ class COIL20Dataset(Dataset):
 
     def __len__(self) -> int:
         return self.data.shape[1]
-    
-    
+
+
 class COIL100Dataset(Dataset):
-    
+
     def __init__(self, root: str, train: bool = True,
                  transform=None,
                  target_transform=None,
@@ -534,7 +529,6 @@ class COIL100Dataset(Dataset):
         views = [np.transpose(self.data[view, index, :], (1, 2, 0))
                  for view in range(self.views)]
         target = self.targets[index]
-
         views = [self.to_pil(v) for v in views]
 
         if self.transform:
@@ -554,10 +548,10 @@ class COIL100Dataset(Dataset):
 class MultiViewClothingDataset(Dataset):
     """
     **Note: Before using this dataset, you have to run the `generate_mvc_dataset` function.**
-    
-    Refers to: Kuan-Hsien Liu, Ting-Yen Chen, and Chu-Song Chen. 
+
+    Refers to: Kuan-Hsien Liu, Ting-Yen Chen, and Chu-Song Chen.
     MVC: A Dataset for View-Invariant Clothing Retrieval and Attribute Prediction, ACM ICMR 2016.
-    Total: 161260 images. 10 classes. 
+    Total: 161260 images. 10 classes.
     (In fact, I found that it has many fails when I downloaded them. So, subject to the actual number)
     The following the size of number is my actual number:
         2 views train size: 29706, test size: 7427
@@ -604,7 +598,7 @@ class MultiViewClothingDataset(Dataset):
                         for path in self.data[index]]
         except:
             print([os.path.join(self.root, path)
-                  for path in self.data[index]])
+                   for path in self.data[index]])
             raise
 
         if self.transform:
@@ -630,7 +624,7 @@ class Office31(Dataset):
         Train set: (2253, 3) (2253, )
         Test set: (564, 3) (564, )
     """
-    
+
     views_mapping = {
         'A': 'amazon/images',
         'D': 'dslr/images',
@@ -649,15 +643,14 @@ class Office31(Dataset):
         self.root = root
         self.transform = transform
         self.load_image_path(train)
-        
-        
+
     def load_image_path(self, train):
         import json
         if train:
             self.data = json.load(open(os.path.join(self.root, 'train.json')))
         else:
             self.data = json.load(open(os.path.join(self.root, 'test.json')))
-    
+
     def __getitem__(self, index):
         a, d, w, target = self.data[index]
         view0 = pil_loader(os.path.join(self.root, a))
@@ -671,22 +664,21 @@ class Office31(Dataset):
             view2 = self.transform(view2)
 
         return [view0, view1, view2], target
-  
-            
+
     def __len__(self):
         return len(self.data)
-    
-    
+
+
 class FFDataset(Dataset):
     """
-    Base on FaceForensics++ dataset. Before using this dataset, 
+    Base on FaceForensics++ dataset. Before using this dataset,
     you have to run the function `generate_deepfake_dataset()`.
     Two views shape: X -> (79257, 2) Y -> (79257,)
     Three views shape: X -> (49549, 3) Y -> (49549,)
     """
-    
-    classes = ['youtube','Deepfakes', 'Face2Face', 'FaceSwap', 'NeuralTextures']
-    
+
+    classes = ['youtube', 'Deepfakes', 'Face2Face', 'FaceSwap', 'NeuralTextures']
+
     def __init__(self, root='/mnt/disk3/data/DeepfakeBench/FaceForensics++', train: bool = True,
                  transform=None, target_transform=None, download: bool = False, views=3) -> None:
         super().__init__()
@@ -696,8 +688,7 @@ class FFDataset(Dataset):
         self.train = train
         self.views = views
         self.load_file()
-        
-    
+
     def load_file(self):
         if self.train:
             idx = torch.load(f"./data/ffdataset/view-{self.views}-train.idx")
@@ -705,7 +696,7 @@ class FFDataset(Dataset):
         else:
             idx = torch.load(f"./data/ffdataset/view-{self.views}-test.idx")
             self.data, self.targets = idx['data'], idx['targets']
-            
+
     def __getitem__(self, index):
         view0, view1, target = self.data[index, 0], self.data[index, 1], self.targets[index]
         if self.views == 3:
@@ -721,12 +712,11 @@ class FFDataset(Dataset):
             view1 = self.transform(view1)
             if self.views == 3:
                 view2 = self.transform(view2)
-            
+
         if self.views == 3:
             return [view0, view1, view2], target
         return [view0, view1], target
-    
-    
+
     def __len__(self):
         return len(self.targets)
 
@@ -747,13 +737,31 @@ def get_train_dataset(args, transform):
     if data_class is None:
         raise ValueError("Dataset name error.")
     train_set = data_class(root=args.dataset.root, train=True,
-                            transform=transform, download=True, views=args.views)
+                           transform=transform, download=True, views=args.views)
 
     return train_set
 
+def get_mask_train_dataset(args, transform):
+    file_path = os.path.join(args.eval.mv_root, "train", args.dataset.name + ".json")
+    # Read the file
+    assert os.path.exists(file_path)
+    with open(file_path, "r") as file:
+        data = json.load(file)
+        random_indices, random_views = data['indices'], data['views']
+    data_class = __dataset_dict.get(args.dataset.name, None)
+    if data_class is None:
+        raise ValueError("Dataset name error.")
+    train_set = data_class(root=args.dataset.root, train=True,
+                         transform=transform, views=args.views,
+                         mask_view=True, random_indices=random_indices,
+                         random_view=random_views)
+    return train_set
+
+
 def get_mask_val(args, transform):
     # print(type(valset[0]))
-    file_path = os.path.join("./MaskView", args.dataset.name+".json")
+    # file_path = os.path.join("./MaskView", args.dataset.name + ".json")
+    file_path = os.path.join(args.eval.mv_root, "test", args.dataset.name + ".json" )
     # Read the file
     assert os.path.exists(file_path)
     with open(file_path, "r") as file:
@@ -768,6 +776,7 @@ def get_mask_val(args, transform):
                          random_view=random_views)
     return val_set
 
+
 def get_val_dataset(args, transform):
     data_class = __dataset_dict.get(args.dataset.name, None)
     if data_class is None:
@@ -775,6 +784,20 @@ def get_val_dataset(args, transform):
     val_set = data_class(root=args.dataset.root, train=False,
                          transform=transform, views=args.views)
     return val_set
+
+def add_sp_noise(x, noise_prob):
+    """
+    Add Salt-Pepper Noise To Dataset
+    Params x:Tensor(C,W,H)
+    """
+    random_matrix = torch.rand_like(x)
+    salt_mask = random_matrix > 1.0 - noise_prob
+    pepper_mask = random_matrix < noise_prob
+    x[salt_mask] = 1.0
+    x[pepper_mask] = 0.0
+
+    return x
+
 
 
 if __name__ == '__main__':
@@ -784,12 +807,18 @@ if __name__ == '__main__':
     # pass
     trans = transforms.Compose([
         transforms.ToTensor()])
-    dataset = EdgeMNISTDataset(train=False, views=2, transform=trans,root="./MyData")
-    print(dataset[0][0][0].shape)
+    dataset = COIL100Dataset(train=False, views=2, transform=trans, root="./MyData")
+    Xs, _ = dataset[0]
+    Xs = [add_sp_noise(x, 0.15) for x in Xs]
+    to_pil_img = transforms.ToPILImage()
+    img = [to_pil_img(x) for x in Xs]
+    for x in img:
+        x.show()
+
     # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=2)
     # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=3)
     # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=4)
     # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=5)
     # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=6)
-    
-    
+
+
