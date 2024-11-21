@@ -183,6 +183,7 @@ _C.disent.mode = 'bias'
 _C.eval = CN()
 _C.eval.model_path = ''
 _C.eval.noise_prob = 0.1
+_C.eval.mv_root = './MaskView'
 
 
 
