@@ -60,4 +60,5 @@ valid_augmentation:
 
 eval:
   model_path: 'model-1529.pth'
+  noise_prob: 0.1
 

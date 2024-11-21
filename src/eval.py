@@ -170,177 +170,135 @@ def main():
     print(f'Use: {device}')
     
     model.eval()
-    print("Evaluation on full modal")
+    print("[Evaluation on full modal]")
     consistency, best_specific, best_concat, all_specific, labels = extract_features(val_dataloader, model, device)
     
     z = best_concat.numpy()
     all_cat_z = torch.cat([consistency, all_specific], dim=-1)
 
-    if evaluation:
-        print('Run consist...')
-        report(run_times, n_clusters, need_classification, labels, consistency.numpy())
 
-        print('Run best concat z...')
-        report(run_times, n_clusters, need_classification, labels, z)
-        
-        print('Run all concat z...')
-        report(run_times, n_clusters, need_classification, labels, all_cat_z)
-        
-        vspecs1 = []
-        vspecs2 = []
+    print('Run consist...')
+    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
+
+    print('Run best concat z...')
+    report(run_times, n_clusters, need_classification, labels, z)
+
+    print('Run all concat z...')
+    report(run_times, n_clusters, need_classification, labels, all_cat_z)
+
+    vspecs1 = []
+    vspecs2 = []
+    if config.views == 3:
+        vspecs3 = []
+    for Xs, _ in val_dataloader:
+        Xs = [x.to(device) for x in Xs]
+        vs = model.vspecific_features(Xs)
+        vspecs1.append(vs[0].detach().cpu())
+        vspecs2.append(vs[1].detach().cpu())
         if config.views == 3:
-            vspecs3 = []
-        for Xs, _ in val_dataloader:
-            Xs = [x.to(device) for x in Xs]
-            vs = model.vspecific_features(Xs)
-            vspecs1.append(vs[0].detach().cpu())
-            vspecs2.append(vs[1].detach().cpu())
-            if config.views == 3:
-                vspecs3.append(vs[2].detach().cpu())
-            
-        vspecs1 = torch.vstack(vspecs1).detach().cpu()
-        vspecs2 = torch.vstack(vspecs2).detach().cpu()
-        if config.views == 3: 
-            vspecs3 = torch.vstack(vspecs3).detach().cpu()
-            
-        print('Run view specificity 1')
-        report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
-        
-        print('Run view specificity 2')
-        report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
-        
-        if config.views == 3: 
-            print('Run view specificity 3')
-            report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
+            vspecs3.append(vs[2].detach().cpu())
+
+    vspecs1 = torch.vstack(vspecs1).detach().cpu()
+    vspecs2 = torch.vstack(vspecs2).detach().cpu()
+    if config.views == 3:
+        vspecs3 = torch.vstack(vspecs3).detach().cpu()
+
+    print('Run view specificity 1')
+    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
+
+    print('Run view specificity 2')
+    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
+
+    if config.views == 3:
+        print('Run view specificity 3')
+        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
 
 
-        print("Evaluation on modal missing")
-        consistency, best_specific, best_concat, all_specific, labels = extract_features(mask_val_dataloader, model, device)
+    print("[Evaluation on modal missing]")
+    consistency, best_specific, best_concat, all_specific, labels = extract_features(mask_val_dataloader, model, device)
 
-        z = best_concat.numpy()
-        all_cat_z = torch.cat([consistency, all_specific], dim=-1)
+    z = best_concat.numpy()
+    all_cat_z = torch.cat([consistency, all_specific], dim=-1)
 
-        print('Run consist...')
-        report(run_times, n_clusters, need_classification, labels, consistency.numpy())
+    print('Run consist...')
+    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
 
-        print('Run best concat z...')
-        report(run_times, n_clusters, need_classification, labels, z)
+    print('Run best concat z...')
+    report(run_times, n_clusters, need_classification, labels, z)
 
-        print('Run all concat z...')
-        report(run_times, n_clusters, need_classification, labels, all_cat_z)
+    print('Run all concat z...')
+    report(run_times, n_clusters, need_classification, labels, all_cat_z)
 
-        vspecs1 = []
-        vspecs2 = []
+    vspecs1 = []
+    vspecs2 = []
+    if config.views == 3:
+        vspecs3 = []
+    for Xs, _ in val_dataloader:
+        Xs = [x.to(device) for x in Xs]
+        vs = model.vspecific_features(Xs)
+        vspecs1.append(vs[0].detach().cpu())
+        vspecs2.append(vs[1].detach().cpu())
         if config.views == 3:
-            vspecs3 = []
-        for Xs, _ in val_dataloader:
-            Xs = [x.to(device) for x in Xs]
-            vs = model.vspecific_features(Xs)
-            vspecs1.append(vs[0].detach().cpu())
-            vspecs2.append(vs[1].detach().cpu())
-            if config.views == 3:
-                vspecs3.append(vs[2].detach().cpu())
+            vspecs3.append(vs[2].detach().cpu())
 
-        vspecs1 = torch.vstack(vspecs1).detach().cpu()
-        vspecs2 = torch.vstack(vspecs2).detach().cpu()
+    vspecs1 = torch.vstack(vspecs1).detach().cpu()
+    vspecs2 = torch.vstack(vspecs2).detach().cpu()
+    if config.views == 3:
+        vspecs3 = torch.vstack(vspecs3).detach().cpu()
+
+    print('Run view specificity 1')
+    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
+
+    print('Run view specificity 2')
+    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
+
+    if config.views == 3:
+        print('Run view specificity 3')
+        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
+
+
+    print("[Evaluation on noise data]")
+    consistency, best_specific, best_concat, all_specific, labels = extract_features(val_dataloader, model, device, noise_prob=config.eval.noise_prob)
+
+    z = best_concat.numpy()
+    all_cat_z = torch.cat([consistency, all_specific], dim=-1)
+
+    print('Run consist...')
+    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
+
+    print('Run best concat z...')
+    report(run_times, n_clusters, need_classification, labels, z)
+
+    print('Run all concat z...')
+    report(run_times, n_clusters, need_classification, labels, all_cat_z)
+
+    vspecs1 = []
+    vspecs2 = []
+    if config.views == 3:
+        vspecs3 = []
+    for Xs, _ in val_dataloader:
+        Xs = [x.to(device) for x in Xs]
+        vs = model.vspecific_features(Xs)
+        vspecs1.append(vs[0].detach().cpu())
+        vspecs2.append(vs[1].detach().cpu())
         if config.views == 3:
-            vspecs3 = torch.vstack(vspecs3).detach().cpu()
+            vspecs3.append(vs[2].detach().cpu())
 
-        print('Run view specificity 1')
-        report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
+    vspecs1 = torch.vstack(vspecs1).detach().cpu()
+    vspecs2 = torch.vstack(vspecs2).detach().cpu()
+    if config.views == 3:
+        vspecs3 = torch.vstack(vspecs3).detach().cpu()
 
-        print('Run view specificity 2')
-        report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
+    print('Run view specificity 1')
+    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
 
-        if config.views == 3:
-            print('Run view specificity 3')
-            report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
+    print('Run view specificity 2')
+    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
 
+    if config.views == 3:
+        print('Run view specificity 3')
+        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
 
-        print("Evaluation on noise data")
-        consistency, best_specific, best_concat, all_specific, labels = extract_features(val_dataloader, model, device)
-
-        z = best_concat.numpy()
-        all_cat_z = torch.cat([consistency, all_specific], dim=-1)
-
-        print('Run consist...')
-        report(run_times, n_clusters, need_classification, labels, consistency.numpy())
-
-        print('Run best concat z...')
-        report(run_times, n_clusters, need_classification, labels, z)
-
-        print('Run all concat z...')
-        report(run_times, n_clusters, need_classification, labels, all_cat_z)
-
-        vspecs1 = []
-        vspecs2 = []
-        if config.views == 3:
-            vspecs3 = []
-        for Xs, _ in val_dataloader:
-            Xs = [x.to(device) for x in Xs]
-            vs = model.vspecific_features(Xs)
-            vspecs1.append(vs[0].detach().cpu())
-            vspecs2.append(vs[1].detach().cpu())
-            if config.views == 3:
-                vspecs3.append(vs[2].detach().cpu())
-
-        vspecs1 = torch.vstack(vspecs1).detach().cpu()
-        vspecs2 = torch.vstack(vspecs2).detach().cpu()
-        if config.views == 3:
-            vspecs3 = torch.vstack(vspecs3).detach().cpu()
-
-        print('Run view specificity 1')
-        report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
-
-        print('Run view specificity 2')
-        report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
-
-        if config.views == 3:
-            print('Run view specificity 3')
-            report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
-    # if visualization:
-    #     dl = DataLoader(train_dataset, 32, shuffle=True)
-    #     recon_samples = next(iter(dl))[0]
-    #     recon_samples = [x.to(device, non_blocking=True) for x in recon_samples]
-    #     consist_grid, vspec_grid = reconstruction(model, recon_samples)
-    #     save_image(consist_grid, os.path.join(config.train.log_dir, f'{config.dataset.name}-consist-recons.{pic_format}'), format=pic_format)
-    #     save_image(vspec_grid, os.path.join(config.train.log_dir, f'{config.dataset.name}-vspec-recons.{pic_format}'), format=pic_format)
-    #
-    #
-    #     # tsne
-    #     tsne_samples = 2000
-    #
-    #     idx = torch.rand(consistency.size(0)).argsort()
-    #     select_idx = idx[:tsne_samples]
-    #
-    #     select_consist = consistency[select_idx, :]
-    #     select_cat = best_concat[select_idx, :]
-    #     select_labels = labels[select_idx]
-    #
-    #     from sklearn.manifold import TSNE
-    #     from matplotlib import pyplot as plt
-    #
-    #
-    #     _, [ax1, ax2] = plt.subplots(1, 2, figsize=(10, 4))
-    #
-    #     print("Run t-sne.....")
-    #     tsne = TSNE(n_components=2, perplexity=15, learning_rate=10)
-    #     sz = tsne.fit_transform(select_consist.numpy())
-    #     plot_scatter(ax1, sz, select_labels)
-    #     handles1, ll1 = ax1.get_legend_handles_labels()
-    #
-    #     bc = tsne.fit_transform(select_cat.numpy())
-    #
-    #     plot_scatter(ax2, bc, select_labels)
-    #
-    #
-    #     plt.figlegend(handles1, ll1, loc='lower center', bbox_to_anchor=(0.5, 0.96),fancybox=True, shadow=False, ncol=10, markerscale=2)
-    #
-    #     plt.tight_layout()
-    #     plt.savefig(os.path.join(config.train.log_dir, f'{config.dataset.name}-tsne.{pic_format}'), bbox_inches='tight', format=pic_format)
-    #     plt.close()
-        
-        
         
 
 

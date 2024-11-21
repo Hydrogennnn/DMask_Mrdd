@@ -105,8 +105,7 @@ _C.train.ckpt_path = ""
 _C.train.use_ddp = True
 _C.train.masked_ratio = 0.6
 _C.train.mask_patch_size = 2
-_C.train.mask_view = True
-_C.train.val_mask_view = True
+_C.train.mask_view = False
 _C.train.mask_view_ratio = 0.3
 _C.train.val_mask_view_ratio = 0.5
 
@@ -183,6 +182,7 @@ _C.disent.mode = 'bias'
 # evaluation.
 _C.eval = CN()
 _C.eval.model_path = ''
+_C.eval.noise_prob = 0.1
 
 
 
