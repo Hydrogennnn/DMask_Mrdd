@@ -103,9 +103,9 @@ def valid_by_kmeans(val_dataloader, model, use_ddp, device, noise=False):
             # print(Xs[0].shape)
             Xs = [x.to(device) for x in Xs]
         if use_ddp:
-            consist_repr_, vspecific_repr_, concate_repr_ = model.module.all_features(Xs)
+            consist_repr_, vspecific_repr_, concate_repr_, _ = model.module.all_features(Xs)
         else:
-            consist_repr_, vspecific_repr_, concate_repr_ = model.all_features(Xs)   # Tensor, list, list
+            consist_repr_, vspecific_repr_, concate_repr_, _ = model.all_features(Xs)   # Tensor, list, list
 
         targets.append(target)
         consist_reprs.append(consist_repr_.detach().cpu())
