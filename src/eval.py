@@ -152,6 +152,8 @@ def main():
                                 shuffle=False,
                                 pin_memory=True,
                                 drop_last=False)
+    assert len(mask_train_dataset) == len(train_dataset)
+    print(f"Contain {len(mask_train_dataset)} eval samples")
 
             
     run_times = 10
