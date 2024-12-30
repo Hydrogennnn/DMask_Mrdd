@@ -4,10 +4,16 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 from PIL import Image
-
 import os
-import json
+from torchvision.utils import make_grid
 import cv2
+import torch.nn.functional as F
+import glob
+from torchvision import datasets
+from nltk.tokenize import sent_tokenize, word_tokenize
+from collections import Counter, OrderedDict
+import json
+import pandas as pd
 
 # provent the depandency of multiple threads.
 cv2.ocl.setUseOpenCL(False)
@@ -38,6 +44,7 @@ def coil(root, n_objs=20, n_views=3):
     2. coil-100:
     http://www.cs.columbia.edu/CAVE/databases/SLAM_coil-20_coil-100/coil-100/coil-100.zip
     """
+
     if os.path.isfile(os.path.join(root, f"coil-{n_objs}/{n_views}v-cache.pth")):
         print('load cache')
         X_train, X_test, y_train, y_test = torch.load(os.path.join(root, f"coil-{n_objs}/{n_views}v-cache.pth"))
@@ -57,10 +64,14 @@ def coil(root, n_objs=20, n_views=3):
 
         img_idx = np.arange(n_imgs)
 
+        # rng = np.random.default_rng(seed=42)
         for obj in range(n_objs):
             obj_list = []
-            obj_img_idx = np.random.permutation(
-                img_idx).reshape(n_views, n_imgs // n_views)
+            # 让每次的数据集多视图划分一致
+            # obj_img_idx = rng.permutation(img_idx).reshape(n_views, n_imgs // n_views)
+
+            obj_img_idx = np.random.permutation(img_idx).reshape(n_views, n_imgs // n_views)
+
             labels += (n_imgs // n_views) * [obj]
 
             for view, indices in enumerate(obj_img_idx):
@@ -123,6 +134,7 @@ def get_train_transformations(args, task='pretext'):
 
 def get_val_transformations(args):
     return transforms.Compose([
+        # ChannelTransform(target_channels=args.valid_augmentation.channels),
         transforms.Resize((args.valid_augmentation.crop_size, args.valid_augmentation.crop_size)),
         transforms.ToTensor()])
 
@@ -256,10 +268,9 @@ def align_office31(root):
         D_path += [p[len(root):] for p in item_D]
         W_path += [p[len(root):] for p in item_W]
         targets += ([idx] * len(item_A))
-
+        print(A_path)
     X = np.c_[[A_path, D_path, W_path]].T
     Y = np.array(targets)
-
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
     train = []
@@ -349,7 +360,7 @@ class EdgeMNISTDataset(torchvision.datasets.MNIST):
                  target_transform=None,
                  download=False,
                  views=None,
-                 mask_view=False,
+                 mask_view: bool = False,
                  random_indices=None,
                  random_view=None
                  ) -> None:
@@ -393,7 +404,7 @@ class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
                  target_transform=None,
                  download: bool = False,
                  views=None,
-                 mask_view=False,
+                 mask_view: bool = False,
                  random_indices=None,
                  random_view=None
                  ) -> None:
@@ -424,8 +435,8 @@ class EdgeFMNISTDataset(torchvision.datasets.FashionMNIST):
             x = [view0, view1]
             x[self.random_views[idx]].zero_()
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        # if self.target_transform is not None:
+        #     target = self.target_transform(target)
         return [view0, view1], self.targets[idx]
 
 
@@ -495,7 +506,7 @@ class COIL100Dataset(Dataset):
                  target_transform=None,
                  download: bool = False,
                  views=2,
-                 mask_view=False,
+                 mask_view: bool = False,
                  random_indices=None,
                  random_view=None
                  ) -> None:
@@ -637,12 +648,28 @@ class Office31(Dataset):
                'pen', 'bottle', 'keyboard', 'phone', 'ruler', 'headphones', 'speaker', 'letter_tray',
                'monitor', 'mobile_phone', 'desk_chair', 'laptop_computer']
 
-    def __init__(self, root='./data/Office31', train: bool = True,
-                 transform=None, target_transform=None, download: bool = False, views=3) -> None:
+    def __init__(self, root='datasets/Office31',
+                 train: bool = True,
+                 transform=None,
+                 target_transform=None,
+                 download: bool = False,
+                 views=3,
+                 mask_view: bool = False,
+                 random_indices=None,
+                 random_view=None
+                 ) -> None:
         super().__init__()
         self.root = root
         self.transform = transform
         self.load_image_path(train)
+
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for i in range(len(self))]
+            self.random_views = [0 for i in range(len(self))]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
 
     def load_image_path(self, train):
         import json
@@ -653,15 +680,23 @@ class Office31(Dataset):
 
     def __getitem__(self, index):
         a, d, w, target = self.data[index]
-        view0 = pil_loader(os.path.join(self.root, a))
-        view1 = pil_loader(os.path.join(self.root, d))
-        view2 = pil_loader(os.path.join(self.root, w))
+
+        view0 = pil_loader(self.root + a)
+        view1 = pil_loader(self.root + d)
+        view2 = pil_loader(self.root + w)
+        # view0 = pil_loader(os.path.join(self.root, a))
+        # view1 = pil_loader(os.path.join(self.root, d))
+        # view2 = pil_loader(os.path.join(self.root, w))
         target = torch.tensor(target).long()
 
         if self.transform:
             view0 = self.transform(view0)
             view1 = self.transform(view1)
             view2 = self.transform(view2)
+
+        if self.mask_view and self.is_mask[index]:
+            x = [view0, view1, view2]
+            x[self.random_views[index]].zero_()
 
         return [view0, view1, view2], target
 
@@ -721,6 +756,431 @@ class FFDataset(Dataset):
         return len(self.targets)
 
 
+class PolyMNISTDataset(Dataset):
+    """
+    Multimodal MNIST Dataset.
+    cd datasets
+    curl -L -o data_PM_ICLR_2024.zip https://polybox.ethz.ch/index.php/s/DvIsHiopIoPnKXI/download
+    unzip data_PM_ICLR_2024.zip
+    """
+
+    def __init__(self, root="datasets/PolyMNIST", train: bool = True,
+                 transform=None,
+                 target_transform=None,
+                 download: bool = False,
+                 views=5,
+                 mask_view: bool = False,
+                 random_indices=None,
+                 random_view=None
+                 ):
+        """
+            Args:
+                transform: tranforms on colored MNIST digits.
+                target_transform: transforms on labels.
+        """
+        super().__init__()
+        self.root = root
+        self.train = train
+        self.views = views
+        self.transform = transform
+        self.target_transform = target_transform
+
+        if self.train:
+            self.unimodal_datapaths = [self.root + "/train/" + "m" + str(i) for i in range(self.views)]
+        else:
+            self.unimodal_datapaths = [self.root + "/test/" + "m" + str(i) for i in range(self.views)]
+
+        # save all paths to individual files
+        self.file_paths = {dp: [] for dp in self.unimodal_datapaths}
+        for dp in self.unimodal_datapaths:
+            files = glob.glob(os.path.join(dp, "*.png"))
+            self.file_paths[dp] = files
+        # assert that each modality has the same number of images
+        num_files = len(self.file_paths[dp])
+        for files in self.file_paths.values():
+            assert len(files) == num_files
+        self.num_files = num_files
+
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for i in range(len(self))]
+            self.random_views = [0 for i in range(len(self))]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
+
+    def __getitem__(self, index):
+        """
+        Returns a tuple (images, labels) where each element is a list of
+        length `self.views`.
+        """
+        files = [self.file_paths[dp][index] for dp in self.unimodal_datapaths]
+        images = [pil_loader(files[m]) for m in range(self.views)]
+        labels = [int(files[m].split(".")[-2]) for m in range(self.views)]
+
+        # transforms
+        if self.transform:
+            images = [self.transform(img) for img in images]
+        if self.target_transform:
+            labels = [self.transform(label) for label in labels]
+
+        if self.mask_view and self.is_mask[index]:
+            images[self.random_views[index]].zero_()
+
+        # NOTE: for PolyMNIST, labels are shared across modalities, so pick one
+        return images, torch.tensor(labels[0])
+
+    def __len__(self):
+        return self.num_files
+
+
+class MNISTSVHNDataset(Dataset):
+
+    def __init__(self, root="datasets/mnist-svhn",
+                 train: bool = True,
+                 transform=None,
+                 target_transform=None,
+                 download: bool = False,
+                 views=2,
+                 mask_view: bool = False,
+                 random_indices=None,
+                 random_view=None
+                 ):
+        self.root = root
+        self.train = train
+        self.transform = transform
+        self.views = views
+        self.target_transform = target_transform
+
+        if train:
+            self.mnist_idx = torch.load(os.path.join(self.root, 'train-ms-mnist-idx.pt'))
+            self.svhn_idx = torch.load(os.path.join(self.root, 'train-ms-svhn-idx.pt'))
+            self.mnist_data = datasets.MNIST(self.root, train=True, download=True, transform=self.transform)
+            self.svhn_data = datasets.SVHN(self.root, split='train', download=True, transform=self.transform)
+        else:
+            self.mnist_idx = torch.load(os.path.join(self.root, 'test-ms-mnist-idx.pt'))
+            self.svhn_idx = torch.load(os.path.join(self.root, 'test-ms-svhn-idx.pt'))
+            self.mnist_data = datasets.MNIST(self.root, train=False, download=True, transform=self.transform)
+            self.svhn_data = datasets.SVHN(self.root, split='test', download=True, transform=self.transform)
+
+        assert len(self.mnist_idx) == len(self.svhn_idx), "MNIST and SVHN indices must have the same length."
+        self.mask_view = mask_view
+        if self.mask_view:
+            self.is_mask = [False for i in range(len(self))]
+            self.random_views = [0 for i in range(len(self))]
+            for (idx, v) in zip(random_indices, random_view):
+                self.is_mask[idx] = True
+                self.random_views[idx] = v
+
+    def __getitem__(self, idx):
+        """
+        """
+        mnist_idx = self.mnist_idx[idx]
+        svhn_idx = self.svhn_idx[idx]
+
+        mnist_sample, mnist_label = self.mnist_data[mnist_idx]
+        svhn_sample, svhn_label = self.svhn_data[svhn_idx]
+
+        if mnist_label != svhn_label:
+            raise ValueError("MNIST and SVHN labels do not match at index {}.".format(idx))
+
+        if self.mask_view and self.is_mask[idx]:
+            x = [mnist_sample, svhn_sample]
+            x[self.random_views[idx]].zero_()
+        return [mnist_sample.repeat(3,1,1), svhn_sample], torch.tensor(mnist_label)
+
+    def __len__(self):
+
+        return len(self.mnist_idx)
+
+
+# CelebaDataset和CUBSentences还不能用
+class CelebaDataset(Dataset):
+    """Custom Dataset for loading CelebA face images"""
+
+    def __init__(self, root="datasets/CelebA", train: bool = True,
+                 transform=None, target_transform=None, download: bool = False, views=2):
+
+        self.root = root
+        self.train = train
+        partition = 0 if self.train else 1
+
+        alphabet_path = os.path.join(self.root, 'alphabet.json')
+        with open(alphabet_path) as alphabet_file:
+            self.alphabet = str(''.join(json.load(alphabet_file)))
+
+        filename_text = os.path.join(self.root, 'list_attr_text_' + str(256).zfill(3) + '_' + str(False) + '_' + str(
+            True) + '_celeba.csv')
+        filename_partition = os.path.join(self.root, 'list_eval_partition.csv')
+        filename_attributes = os.path.join(self.root, 'list_attr_celeba.csv')
+
+        df_text = pd.read_csv(filename_text)
+        df_partition = pd.read_csv(filename_partition)
+        df_attributes = pd.read_csv(filename_attributes)
+
+        self.img_dir = os.path.join(self.root, 'img_align_celeba')
+        self.txt_path = filename_text
+        self.attrributes_path = filename_attributes
+        self.partition_path = filename_partition
+
+        self.img_names = df_text.loc[df_partition['partition'] == partition]['image_id'].values
+        self.attributes = df_attributes.loc[df_partition['partition'] == partition]
+        self.labels = df_attributes.loc[
+            df_partition['partition'] == partition].values  # atm, i am just using blond_hair as labels
+        self.y = df_text.loc[df_partition['partition'] == partition]['text'].values
+
+        offset_height = (218 - 148) // 2
+        offset_width = (178 - 148) // 2
+        crop = lambda x: x[:, offset_height:offset_height + 148,
+                         offset_width:offset_width + 148]
+        _transform = transforms.Compose([transforms.ToTensor(),
+                                         transforms.Lambda(crop),
+                                         transforms.ToPILImage(),
+                                         transforms.Resize(size=(64, 64),
+                                                           interpolation=Image.BICUBIC),
+                                         transforms.ToTensor()])
+
+        self.transform = _transform
+
+    def __getitem__(self, index):
+        img = Image.open(os.path.join(self.img_dir, self.img_names[index]))
+
+        if self.transform is not None:
+            img = self.transform(img)
+        text_str = self.one_hot_encode(256, self.alphabet, self.y[index])
+        label = torch.from_numpy((self.labels[index, 1:] > 0).astype(int)).float()
+        sample = {'img': img, 'text': text_str}
+        return [img, text_str], torch.tensor(label)
+
+    def __len__(self):
+        return self.y.shape[0]
+
+    def get_text_str(self, index):
+        return self.y[index]
+
+    def one_hot_encode(self, len_seq, alphabet, seq):
+        X = torch.zeros(len_seq, len(alphabet))
+        if len(seq) > len_seq:
+            seq = seq[:len_seq]
+        for index_char, char in enumerate(seq):
+            if self.char2Index(alphabet, char) != -1:
+                X[index_char, self.char2Index(alphabet, char)] = 1.0
+        return X
+
+    def char2Index(self, alphabet, character):
+        return alphabet.find(character)
+
+
+class OrderedCounter(Counter, OrderedDict):
+    """Counter that remembers the order elements are first encountered."""
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, OrderedDict(self))
+
+    def __reduce__(self):
+        return self.__class__, (OrderedDict(self),)
+
+
+class CUBSentences(Dataset):
+
+    def __init__(self, root_data_dir, split, one_hot=False, transpose=False, transform=None, **kwargs):
+        """split: 'trainval' or 'test' """
+
+        super().__init__()
+        self.data_dir = os.path.join(root_data_dir, 'cub')
+        self.split = split
+        self.max_sequence_length = kwargs.get('max_sequence_length', 32)
+        self.min_occ = kwargs.get('min_occ', 3)
+        self.transform = transform
+        self.one_hot = one_hot
+        self.transpose = transpose
+        # os.makedirs(os.path.join(root_data_dir, "lang_emb"), exist_ok=True)
+
+        self.gen_dir = os.path.join(self.data_dir, "oc:{}_msl:{}".
+                                    format(self.min_occ, self.max_sequence_length))
+
+        if split == 'train':
+            self.raw_data_path = os.path.join(self.data_dir, 'text_trainvalclasses.txt')
+        elif split == 'test':
+            self.raw_data_path = os.path.join(self.data_dir, 'text_testclasses.txt')
+        else:
+            raise Exception("Only train or test split is available")
+
+        os.makedirs(self.gen_dir, exist_ok=True)
+        self.data_file = 'cub.{}.s{}'.format(split, self.max_sequence_length)
+        self.vocab_file = 'cub.vocab'
+
+        if not os.path.exists(os.path.join(self.gen_dir, self.data_file)):
+            print("Data file not found for {} split at {}. Creating new... (this may take a while)".
+                  format(split.upper(), os.path.join(self.gen_dir, self.data_file)))
+            self._create_data()
+
+        else:
+            self._load_data()
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        sent = self.data[str(idx)]['idx']
+
+        if self.one_hot:
+            sent = nn.functional.one_hot(torch.Tensor(sent).long(), self.vocab_size).float()
+
+        if self.transpose:
+            sent = sent.transpose(-2, -1)
+        if self.transform is not None:
+            sent = self.transform(sent)
+        return sent, self.data[str(idx)]['length']
+
+    @property
+    def vocab_size(self):
+        return len(self.w2i)
+
+    @property
+    def pad_idx(self):
+        return self.w2i['<pad>']
+
+    @property
+    def eos_idx(self):
+        return self.w2i['<eos>']
+
+    @property
+    def unk_idx(self):
+        return self.w2i['<unk>']
+
+    def get_w2i(self):
+        return self.w2i
+
+    def get_i2w(self):
+        return self.i2w
+
+    def _load_data(self, vocab=True):
+        try:
+            with open(os.path.join(self.gen_dir, self.data_file), 'rb') as file:
+                self.data = json.load(file)
+        except TypeError:
+            with open(os.path.join(self.gen_dir, self.data_file), 'r') as file:
+                self.data = json.load(file)
+
+        if vocab:
+            self._load_vocab()
+
+    def _load_vocab(self):
+        if not os.path.exists(os.path.join(self.gen_dir, self.vocab_file)):
+            self._create_vocab()
+        with open(os.path.join(self.gen_dir, self.vocab_file), 'r') as vocab_file:
+            vocab = json.load(vocab_file)
+        self.w2i, self.i2w = vocab['w2i'], vocab['i2w']
+
+    def _create_data(self):
+        if self.split == 'train' and not os.path.exists(os.path.join(self.gen_dir, self.vocab_file)):
+            self._create_vocab()
+        else:
+            self._load_vocab()
+
+        with open(self.raw_data_path, 'r') as file:
+            text = file.read()
+            sentences = sent_tokenize(text)
+
+        data = defaultdict(dict)
+        pad_count = 0
+
+        for i, line in enumerate(sentences):
+            words = word_tokenize(line)
+
+            tok = words[:self.max_sequence_length - 1]
+            tok = tok + ['<eos>']
+            length = len(tok)
+            if self.max_sequence_length > length:
+                tok.extend(['<pad>'] * (self.max_sequence_length - length))
+                pad_count += 1
+            idx = [self.w2i.get(w, self.w2i['<exc>']) for w in tok]
+
+            id = len(data)
+            data[id]['tok'] = tok
+            data[id]['idx'] = idx
+            data[id]['length'] = length
+
+        print("{} out of {} sentences are truncated with max sentence length {}.".
+              format(len(sentences) - pad_count, len(sentences), self.max_sequence_length))
+        with io.open(os.path.join(self.gen_dir, self.data_file), 'wb') as data_file:
+            data = json.dumps(data, ensure_ascii=False)
+            data_file.write(data.encode('utf8', 'replace'))
+
+        self._load_data(vocab=False)
+
+    def _create_vocab(self):
+
+        import nltk
+        nltk.download('punkt')
+
+        assert self.split == 'train', "Vocablurary can only be created for training file."
+
+        with open(self.raw_data_path, 'r') as file:
+            text = file.read()
+            sentences = sent_tokenize(text)
+
+        occ_register = OrderedCounter()
+        w2i = dict()
+        i2w = dict()
+
+        special_tokens = ['<exc>', '<pad>', '<eos>']
+        for st in special_tokens:
+            i2w[len(w2i)] = st
+            w2i[st] = len(w2i)
+
+        texts = []
+        unq_words = []
+
+        for i, line in enumerate(sentences):
+            words = word_tokenize(line)
+            occ_register.update(words)
+            texts.append(words)
+
+        for w, occ in occ_register.items():
+            if occ > self.min_occ and w not in special_tokens:
+                i2w[len(w2i)] = w
+                w2i[w] = len(w2i)
+            else:
+                unq_words.append(w)
+
+        assert len(w2i) == len(i2w)
+
+        print("Vocablurary of {} keys created, {} words are excluded (occurrence <= {})."
+              .format(len(w2i), len(unq_words), self.min_occ))
+
+        vocab = dict(w2i=w2i, i2w=i2w)
+        with io.open(os.path.join(self.gen_dir, self.vocab_file), 'wb') as vocab_file:
+            data = json.dumps(vocab, ensure_ascii=False)
+            vocab_file.write(data.encode('utf8', 'replace'))
+
+        with open(os.path.join(self.gen_dir, 'cub.unique'), 'wb') as unq_file:
+            pickle.dump(np.array(unq_words), unq_file)
+
+        with open(os.path.join(self.gen_dir, 'cub.all'), 'wb') as a_file:
+            pickle.dump(occ_register, a_file)
+
+        self._load_vocab()
+
+    def one_hot_to_string(self, data):
+        ret_list = [self._to_string(i) for i in data]
+        return ret_list
+
+    def _to_string(self, matrix):
+        words = []
+
+        if self.transpose:
+            matrix = matrix.T
+
+        for i in range(matrix.shape[0]):
+            idx = np.argmax(matrix[i, :])
+            words.append(self.i2w[str(idx)])
+
+        ret_str = " ".join(words)
+        return ret_str
+
+
 __dataset_dict = {
     'EdgeMnist': EdgeMNISTDataset,
     'FashionMnist': EdgeFMNISTDataset,
@@ -728,7 +1188,9 @@ __dataset_dict = {
     'coil-20': COIL20Dataset,
     'coil-100': COIL100Dataset,
     'office-31': Office31,
-    'ff++': FFDataset
+    'ff++': FFDataset,
+    'PolyMnist': PolyMNISTDataset,
+    'mnist-svhn': MNISTSVHNDataset,
 }
 
 
@@ -741,6 +1203,7 @@ def get_train_dataset(args, transform):
 
     return train_set
 
+
 def get_mask_train_dataset(args, transform):
     file_path = os.path.join(args.eval.mv_root, "train", args.dataset.name + ".json")
     # Read the file
@@ -752,16 +1215,26 @@ def get_mask_train_dataset(args, transform):
     if data_class is None:
         raise ValueError("Dataset name error.")
     train_set = data_class(root=args.dataset.root, train=True,
-                         transform=transform, views=args.views,
-                         mask_view=True, random_indices=random_indices,
-                         random_view=random_views)
+                           transform=transform, views=args.views,
+                           mask_view=True, random_indices=random_indices,
+                           random_view=random_views)
     return train_set
+
+
+def get_val_dataset(args, transform):
+    data_class = __dataset_dict.get(args.dataset.name, None)
+    if data_class is None:
+        raise ValueError("Dataset name error.")
+    val_set = data_class(root=args.dataset.root, train=False,
+                         transform=transform, views=args.views)
+
+    return val_set
 
 
 def get_mask_val(args, transform):
     # print(type(valset[0]))
     # file_path = os.path.join("./MaskView", args.dataset.name + ".json")
-    file_path = os.path.join(args.eval.mv_root, "test", args.dataset.name + ".json" )
+    file_path = os.path.join(args.eval.mv_root, "test", args.dataset.name + ".json")
     # Read the file
     assert os.path.exists(file_path)
     with open(file_path, "r") as file:
@@ -776,14 +1249,6 @@ def get_mask_val(args, transform):
                          random_view=random_views)
     return val_set
 
-
-def get_val_dataset(args, transform):
-    data_class = __dataset_dict.get(args.dataset.name, None)
-    if data_class is None:
-        raise ValueError("Dataset name error.")
-    val_set = data_class(root=args.dataset.root, train=False,
-                         transform=transform, views=args.views)
-    return val_set
 
 def add_sp_noise(x, noise_prob):
     """
@@ -799,26 +1264,23 @@ def add_sp_noise(x, noise_prob):
     return x
 
 
+class ChannelTransform(object):
+    def __init__(self, target_channels):
+        self.target_channels = target_channels
 
-if __name__ == '__main__':
-    # dataset = MultiViewClothingDataset(train=False, views=3)
-    # dataset = COIL100Dataset(root='/home/xyzhang/guanzhouke/MyData', train=True, views=4)
-    # print(dataset[0])
-    # pass
-    trans = transforms.Compose([
-        transforms.ToTensor()])
-    dataset = COIL100Dataset(train=False, views=2, transform=trans, root="./MyData")
-    Xs, _ = dataset[0]
-    Xs = [add_sp_noise(x, 0.15) for x in Xs]
-    to_pil_img = transforms.ToPILImage()
-    img = [to_pil_img(x) for x in Xs]
-    for x in img:
-        x.show()
+    def __call__(self, x):
+        current_channels = x.size(0)
 
-    # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=2)
-    # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=3)
-    # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=4)
-    # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=5)
-    # generate_mvc_dataset('/mnt/disk3/data/mvc-10', views=6)
+        # 如果目标通道数大于当前通道数，可以复制通道
+        if current_channels < self.target_channels:
+            repeat_times = self.target_channels // current_channels
+            remainder = self.target_channels % current_channels
+            x = x.repeat(repeat_times, 1, 1)
+            if remainder > 0:
+                x = torch.cat([x, x[:remainder, :, :]], dim=0)
 
+        # 如果目标通道数小于当前通道数，可以截取通道
+        elif current_channels > self.target_channels:
+            x = x[:self.target_channels, :, :]
 
+        return x

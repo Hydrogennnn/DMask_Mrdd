@@ -216,9 +216,9 @@ def main():
                 # print(type(x))
             print('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
         
-            dl = DataLoader(val_dataset, 16, shuffle=True)
-            recon_samples = next(iter(dl))[0]
-            recon_samples = [x.to(device, non_blocking=True) for x in recon_samples]
+            # dl = DataLoader(val_dataset, 16, shuffle=True)
+            # recon_samples = next(iter(dl))[0]
+            # recon_samples = [x.to(device, non_blocking=True) for x in recon_samples]
         
         # Create contrastive model.
         model = ConsistencyAE(basic_hidden_dim=config.consistency.basic_hidden_dim,

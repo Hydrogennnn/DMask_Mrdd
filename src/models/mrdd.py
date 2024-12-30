@@ -159,7 +159,7 @@ class MRDD(nn.Module):
             recons_loss, kld_loss = venc.get_loss(Xs[i], y=C)
             mi_lb = mi_est.learning_loss(venc.latent(Xs[i]), C)
             disent_loss = self.args.disent.lam * mi_lb
-            
+
             return_details[f'v{i+1}-recon-loss'] = recons_loss.item()
             return_details[f'v{i+1}-kld-loss'] = kld_loss.item()
             return_details[f'v{i+1}-disent-loss'] = disent_loss.item()

@@ -158,7 +158,7 @@ def main():
             
     run_times = 10
     n_clusters = config.dataset.class_num
-    need_classification = False
+    need_classification = True
     evaluation = True
     visualization = False
     pic_format = 'pdf'
