@@ -238,30 +238,30 @@ def main():
                                     pin_memory=True,
                                     drop_last=True)
         # Only evaluation at the first device.
-        if LOCAL_RANK == 0 or LOCAL_RANK == -1:
+        # if LOCAL_RANK == 0 or LOCAL_RANK == -1:
+        #
+        #     mask_val_dataset = get_mask_val(config, val_transformations)
+        #     mask_val_dataloader = DataLoader(mask_val_dataset,
+        #                                      batch_size=config.train.batch_size // WORLD_SIZE,
+        #                                      num_workers=config.train.num_workers,
+        #                                      shuffle=False,
+        #                                      drop_last=False,
+        #                                      pin_memory=True)
+        #     val_dataset = get_val_dataset(config, val_transformations)
+        #     val_dataloader = DataLoader(val_dataset,
+        #                                 batch_size=config.train.batch_size // WORLD_SIZE,
+        #                                 num_workers=config.train.num_workers,
+        #                                 shuffle=False,
+        #                                 drop_last=False,
+        #                                 pin_memory=True)
+        #
+        #     smartprint('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
+        #
+        #     dl = DataLoader(val_dataset, 16, shuffle=True)
+        #     recon_samples = next(iter(dl))[0]
+        #     recon_samples = [x.to(device, non_blocking=True) for x in recon_samples]
 
-            mask_val_dataset = get_mask_val(config, val_transformations)
-            mask_val_dataloader = DataLoader(mask_val_dataset,
-                                             batch_size=config.train.batch_size // WORLD_SIZE,
-                                             num_workers=config.train.num_workers,
-                                             shuffle=False,
-                                             drop_last=False,
-                                             pin_memory=True)
-            val_dataset = get_val_dataset(config, val_transformations)
-            val_dataloader = DataLoader(val_dataset,
-                                        batch_size=config.train.batch_size // WORLD_SIZE,
-                                        num_workers=config.train.num_workers,
-                                        shuffle=False,
-                                        drop_last=False,
-                                        pin_memory=True)
-
-            smartprint('Dataset contains {}/{} train/val samples'.format(len(train_dataset), len(val_dataset)))
-        
-            dl = DataLoader(val_dataset, 16, shuffle=True)
-            recon_samples = next(iter(dl))[0]
-            recon_samples = [x.to(device, non_blocking=True) for x in recon_samples]
-        
- 
+        smartprint('Dataset contains {} train samples'.format(len(train_dataset)))
         model = MRDD(config, consistency_encoder_path=consistency_encoder_path, device=device)
         if LOCAL_RANK == 0 or LOCAL_RANK == -1:
             summary(model)
@@ -315,49 +315,49 @@ def main():
       
                     schedulers[vid].step()
 
-            if LOCAL_RANK == 0 or LOCAL_RANK == -1:
-                if epoch % evaluate_intervals == 0:
-                    if config.train.use_ddp:
-                        model.module.eval()
-                    else:
-                        model.eval()
-
-                        # validate on full modal
-                        kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
-                                                        model=model,
-                                                        device=device,
-                                                        use_ddp=use_ddp)
-                        print(f"[Evaluation {epoch}/{config.train.epochs}]",
-                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
-                        if use_wandb:
-                            wandb.log(kmeans_result, step=epoch)
-
-                        # validate on modal missing
-                        kmeans_result = valid_by_kmeans(val_dataloader=mask_val_dataloader,
-                                                        model=model,
-                                                        device=device,
-                                                        use_ddp=use_ddp)
-                        print(f"[Modal missing]",
-                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
-                        if use_wandb:
-                            for k, v in kmeans_result.items():
-                                wandb.log({k + "(modal missing)": v}, step=epoch)
-
-                        # validate on full modal with Gaussian Noise
-                        kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
-                                                        model=model,
-                                                        device=device,
-                                                        use_ddp=use_ddp,
-                                                        noise=True)
-                        print(f"[Data with Noise]",
-                              ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
-                        if use_wandb:
-                            for k, v in kmeans_result.items():
-                                wandb.log({k + "(with noise)": v}, step=epoch)
-                    
-                        
-                    if use_wandb:
-                        wandb.log(kmeans_result, step=epoch)
+            # if LOCAL_RANK == 0 or LOCAL_RANK == -1:
+            #     if epoch % evaluate_intervals == 0:
+            #         if config.train.use_ddp:
+            #             model.module.eval()
+            #         else:
+            #             model.eval()
+            #
+            #             # validate on full modal
+            #             kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+            #                                             model=model,
+            #                                             device=device,
+            #                                             use_ddp=use_ddp)
+            #             print(f"[Evaluation {epoch}/{config.train.epochs}]",
+            #                   ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+            #             if use_wandb:
+            #                 wandb.log(kmeans_result, step=epoch)
+            #
+            #             # validate on modal missing
+            #             kmeans_result = valid_by_kmeans(val_dataloader=mask_val_dataloader,
+            #                                             model=model,
+            #                                             device=device,
+            #                                             use_ddp=use_ddp)
+            #             print(f"[Modal missing]",
+            #                   ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+            #             if use_wandb:
+            #                 for k, v in kmeans_result.items():
+            #                     wandb.log({k + "(modal missing)": v}, step=epoch)
+            #
+            #             # validate on full modal with Gaussian Noise
+            #             kmeans_result = valid_by_kmeans(val_dataloader=val_dataloader,
+            #                                             model=model,
+            #                                             device=device,
+            #                                             use_ddp=use_ddp,
+            #                                             noise=True)
+            #             print(f"[Data with Noise]",
+            #                   ', '.join([f'{k}:{v:.4f}' for k, v in kmeans_result.items()]))
+            #             if use_wandb:
+            #                 for k, v in kmeans_result.items():
+            #                     wandb.log({k + "(with noise)": v}, step=epoch)
+            #
+            #
+            #         if use_wandb:
+            #             wandb.log(kmeans_result, step=epoch)
                 
         # update seed.        
         running_loggers[f'r{r+1}-{seed}'] = sub_logger
