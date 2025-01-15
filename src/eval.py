@@ -5,15 +5,15 @@ import os
 from collections import defaultdict
 
 import torch
+import random
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid, save_image
 import numpy as np
-import wandb
-from tqdm import tqdm
-from torchinfo import summary
+import json
+
 from scipy.optimize import linear_sum_assignment
 from configs.basic_config import get_cfg
 from models.mrdd import MRDD
@@ -49,11 +49,11 @@ def clustering_accuracy(y_true, y_pred):
 
 def clustering_metric(y_true, y_pred, decimals=4):
     """Get clustering metric"""
-    
+
     # ACC
     acc = clustering_accuracy(y_true, y_pred)
     acc = np.round(acc, decimals)
-    
+
     # NMI
     nmi = metrics.normalized_mutual_info_score(y_true, y_pred)
     nmi = np.round(nmi, decimals)
@@ -66,7 +66,7 @@ def clustering_metric(y_true, y_pred, decimals=4):
 
 def classification_metric(y_true, y_pred, average='macro', verbose=True, decimals=4):
     """Get classification metric"""
-   
+
     # ACC
     accuracy = metrics.accuracy_score(y_true, y_pred)
     accuracy = np.round(accuracy, decimals)
@@ -89,7 +89,7 @@ def reconstruction(model, original):
     for x, r in zip(original, vspecific_recons):
         grid.append(torch.cat([x, r]).detach().cpu())
     vspec_grid = make_grid(torch.cat(grid).detach().cpu())
-    
+
     grid = []
     for x, r in zip(original, consist_recons):
         grid.append(torch.cat([x, r]).detach().cpu())
@@ -128,34 +128,42 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
+def generate_missing(m_ratio, tot_nums, dataset_name, num_views):
+    res_dir = os.path.join("MaskView", dataset_name, str(m_ratio))
+    file_path = os.path.join(res_dir, "train.json")
+    if not os.path.isdir(res_dir):
+        os.makedirs(res_dir)
+    # Write the file
+    random.seed = 42
+    num_to_select = int(tot_nums * m_ratio)
+    random_indices = random.sample(range(tot_nums), num_to_select)
+    random_views = [random.randint(0, num_views - 1) for _ in range(num_to_select)]
+    print('name:', dataset_name, 'len:', tot_nums, 'num_views:', num_views)
+    with open(file_path, "w") as file:
+        json.dump({'indices': random_indices, 'views': random_views}, file)
+
 def main():
     # Load arguments.
     args = parse_args()
     config = get_cfg(args.config_file)
     device = torch.device(f'cuda:{config.train.devices[0]}')
-    
-    
-    val_transformations = get_val_transformations(config)
-    train_dataset = get_train_dataset(config, val_transformations)
-    val_dataloader = DataLoader(train_dataset,
-                                num_workers=config.train.num_workers,
-                                batch_size=config.train.batch_size,
-                                sampler=None,
-                                shuffle=False,
-                                pin_memory=True,
-                                drop_last=False)
-    mask_train_dataset = get_mask_train_dataset(config, val_transformations)
-    mask_val_dataloader = DataLoader(mask_train_dataset,
-                                num_workers=config.train.num_workers,
-                                batch_size=config.train.batch_size,
-                                sampler=None,
-                                shuffle=False,
-                                pin_memory=True,
-                                drop_last=False)
-    assert len(mask_train_dataset) == len(train_dataset)
-    print(f"Contain {len(mask_train_dataset)} eval samples")
 
-            
+
+    val_transformations = get_val_transformations(config)
+    train_set = get_train_dataset(config, val_transformations)
+    train_dataloader = DataLoader(train_set,
+                                num_workers=0,
+                                batch_size=config.train.batch_size,
+                                sampler=None,
+                                shuffle=False,
+                                pin_memory=True,
+                                drop_last=False)
+
+
+    print(f"Contain {len(train_set)} eval samples")
+
+
     run_times = 10
     n_clusters = config.dataset.class_num
     need_classification = True
@@ -165,143 +173,55 @@ def main():
     model_path = config.eval.model_path
     model = MRDD(config, consistency_encoder_path=None, device=device)
     model.load_state_dict(torch.load(model_path, map_location='cpu'))
-    
+
     # summary(model)
-    
+
     model = model.to(device)
     print(f'Use: {device}')
-    
+
     model.eval()
-    print("[Evaluation on full modal]")
-    consistency, best_specific, best_concat, all_specific, labels = extract_features(val_dataloader, model, device)
-    
-    z = best_concat.numpy()
-    all_cat_z = torch.cat([consistency, all_specific], dim=-1)
+    eval_res = defaultdict(list)
+    res_dir = "eval_res"
+    if not os.path.isdir(res_dir):
+        os.mkdir(res_dir)
+    res_path = os.path.join(res_dir, config.dataset.name + ".json")
+
+    for i in range(0, 10):
+        print(f"[Evaluation on {i / 10}modal missing]")
+        generate_missing(m_ratio=i / 10, tot_nums=len(train_set), dataset_name=config.dataset.name,
+                         num_views=config.views)
+        mask_train_set = get_mask_train_dataset(config, val_transformations, m_ratio=i / 10)
+        mask_train_dataloader = DataLoader(mask_train_set,
+                                           num_workers=0,
+                                           batch_size=config.train.batch_size,
+                                           sampler=None,
+                                           shuffle=False,
+                                           pin_memory=True,
+                                           drop_last=False)
+
+        consistency, vspecific, concate, all_concate, labels = extract_features(mask_train_dataloader, model, device)
+        print('eval on consist...')
+        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, consistency)
+        eval_res["cluster-missing-mean"].append(np.mean(cluster_acc))
+        eval_res["cluster-missing-std"].append(np.std(cluster_acc))
+        eval_res["cls-missing-mean"].append(np.mean(cls_acc))
+        eval_res["cls-missing-std"].append(np.std(cls_acc))
+
+    for i in range(0, 10):
+        print(f"[Evaluation on {i / 10} Salt-Pepper noise]")
+        consistency, vspecific, concate, all_concate, labels = extract_features(train_dataloader, model, device,
+                                                                                noise_prob=i / 10)
+        print('eval on consist...')
+        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, consistency)
+        eval_res["cluster-noise-mean"].append(np.mean(cluster_acc))
+        eval_res["cluster-noise-std"].append(np.std(cluster_acc))
+        eval_res["cls-noise-mean"].append(np.mean(cls_acc))
+        eval_res["cls-noise-std"].append(np.std(cls_acc))
+
+    with open(res_path, "w") as file:
+        json.dump(eval_res, file)
 
 
-    print('Run consist...')
-    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
-
-    print('Run best concat z...')
-    report(run_times, n_clusters, need_classification, labels, z)
-
-    print('Run all concat z...')
-    report(run_times, n_clusters, need_classification, labels, all_cat_z)
-
-    vspecs1 = []
-    vspecs2 = []
-    if config.views == 3:
-        vspecs3 = []
-    for Xs, _ in val_dataloader:
-        Xs = [x.to(device) for x in Xs]
-        vs = model.vspecific_features(Xs)
-        vspecs1.append(vs[0].detach().cpu())
-        vspecs2.append(vs[1].detach().cpu())
-        if config.views == 3:
-            vspecs3.append(vs[2].detach().cpu())
-
-    vspecs1 = torch.vstack(vspecs1).detach().cpu()
-    vspecs2 = torch.vstack(vspecs2).detach().cpu()
-    if config.views == 3:
-        vspecs3 = torch.vstack(vspecs3).detach().cpu()
-
-    print('Run view specificity 1')
-    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
-
-    print('Run view specificity 2')
-    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
-
-    if config.views == 3:
-        print('Run view specificity 3')
-        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
-
-
-    print("[Evaluation on modal missing]")
-    consistency, best_specific, best_concat, all_specific, labels = extract_features(mask_val_dataloader, model, device)
-
-    z = best_concat.numpy()
-    all_cat_z = torch.cat([consistency, all_specific], dim=-1)
-
-    print('Run consist...')
-    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
-
-    print('Run best concat z...')
-    report(run_times, n_clusters, need_classification, labels, z)
-
-    print('Run all concat z...')
-    report(run_times, n_clusters, need_classification, labels, all_cat_z)
-
-    vspecs1 = []
-    vspecs2 = []
-    if config.views == 3:
-        vspecs3 = []
-    for Xs, _ in val_dataloader:
-        Xs = [x.to(device) for x in Xs]
-        vs = model.vspecific_features(Xs)
-        vspecs1.append(vs[0].detach().cpu())
-        vspecs2.append(vs[1].detach().cpu())
-        if config.views == 3:
-            vspecs3.append(vs[2].detach().cpu())
-
-    vspecs1 = torch.vstack(vspecs1).detach().cpu()
-    vspecs2 = torch.vstack(vspecs2).detach().cpu()
-    if config.views == 3:
-        vspecs3 = torch.vstack(vspecs3).detach().cpu()
-
-    print('Run view specificity 1')
-    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
-
-    print('Run view specificity 2')
-    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
-
-    if config.views == 3:
-        print('Run view specificity 3')
-        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
-
-
-    print("[Evaluation on noise data]")
-    consistency, best_specific, best_concat, all_specific, labels = extract_features(val_dataloader, model, device, noise_prob=config.eval.noise_prob)
-
-    z = best_concat.numpy()
-    all_cat_z = torch.cat([consistency, all_specific], dim=-1)
-
-    print('Run consist...')
-    report(run_times, n_clusters, need_classification, labels, consistency.numpy())
-
-    print('Run best concat z...')
-    report(run_times, n_clusters, need_classification, labels, z)
-
-    print('Run all concat z...')
-    report(run_times, n_clusters, need_classification, labels, all_cat_z)
-
-    vspecs1 = []
-    vspecs2 = []
-    if config.views == 3:
-        vspecs3 = []
-    for Xs, _ in val_dataloader:
-        Xs = [x.to(device) for x in Xs]
-        vs = model.vspecific_features(Xs)
-        vspecs1.append(vs[0].detach().cpu())
-        vspecs2.append(vs[1].detach().cpu())
-        if config.views == 3:
-            vspecs3.append(vs[2].detach().cpu())
-
-    vspecs1 = torch.vstack(vspecs1).detach().cpu()
-    vspecs2 = torch.vstack(vspecs2).detach().cpu()
-    if config.views == 3:
-        vspecs3 = torch.vstack(vspecs3).detach().cpu()
-
-    print('Run view specificity 1')
-    report(run_times, n_clusters, need_classification, labels, vspecs1.numpy())
-
-    print('Run view specificity 2')
-    report(run_times, n_clusters, need_classification, labels, vspecs2.numpy())
-
-    if config.views == 3:
-        print('Run view specificity 3')
-        report(run_times, n_clusters, need_classification, labels, vspecs3.numpy())
-
-        
 
 
 def report(run_times, n_clusters, need_classification, labels, z):
@@ -311,7 +231,7 @@ def report(run_times, n_clusters, need_classification, labels, z):
     cls_acc = []
     cls_p = []
     cls_fs = []
-    
+
     for run in range(run_times):
         km = KMeans(n_clusters=n_clusters, n_init='auto')
         preds = km.fit_predict(z)
@@ -319,7 +239,7 @@ def report(run_times, n_clusters, need_classification, labels, z):
         cluster_acc.append(acc)
         cluster_nmi.append(nmi)
         cluster_ari.append(ari)
-        
+
         if need_classification:
             X_train, X_test, y_train, y_test = train_test_split(z, labels, test_size=0.2)
             svc = SVC()
@@ -329,17 +249,17 @@ def report(run_times, n_clusters, need_classification, labels, z):
             cls_acc.append(accuracy)
             cls_p.append(precision)
             cls_fs.append(f_score)
-            
+
     print(f'[Clustering] acc: {np.mean(cluster_acc):.4f} ({np.std(cluster_acc):.4f}) | nmi: {np.mean(cluster_nmi):.4f} ({np.std(cluster_nmi):.4f}) \
     | ari: {np.mean(cluster_ari):.4f} ({np.std(cluster_ari):.4f})')
 
     if need_classification:
         print(f'[Classification] acc: {np.mean(cls_acc):.4f} ({np.std(cls_acc):.4f}) | fscore: {np.mean(cls_fs):.4f} ({np.std(cls_fs):.4f}) \
     | p: {np.mean(cls_p):.4f} ({np.std(cls_p):.4f}) ')
-    
+
     return cluster_acc,cluster_nmi,cluster_ari,cls_acc,cls_p,cls_fs
 
 
-    
+
 if __name__ == '__main__':
     main()

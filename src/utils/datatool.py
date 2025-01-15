@@ -1,6 +1,7 @@
 import torchvision.transforms as transforms
 import torchvision
 from torch.utils.data import Dataset
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from PIL import Image
@@ -1180,7 +1181,6 @@ class CUBSentences(Dataset):
         ret_str = " ".join(words)
         return ret_str
 
-
 __dataset_dict = {
     'EdgeMnist': EdgeMNISTDataset,
     'FashionMnist': EdgeFMNISTDataset,
@@ -1191,6 +1191,7 @@ __dataset_dict = {
     'ff++': FFDataset,
     'PolyMnist': PolyMNISTDataset,
     'mnist-svhn': MNISTSVHNDataset,
+    'LandUse': LandUse
 }
 
 
@@ -1204,8 +1205,8 @@ def get_train_dataset(args, transform):
     return train_set
 
 
-def get_mask_train_dataset(args, transform):
-    file_path = os.path.join(args.eval.mv_root, "train", args.dataset.name + ".json")
+def get_mask_train_dataset(args, transform, m_ratio=0.0):
+    file_path = os.path.join(args.eval.mv_root, args.dataset.name,str(m_ratio), "train.json")
     # Read the file
     assert os.path.exists(file_path)
     with open(file_path, "r") as file:
@@ -1255,6 +1256,7 @@ def add_sp_noise(x, noise_prob):
     Add Salt-Pepper Noise To Dataset
     Params x:Tensor(C,W,H)
     """
+    noise_prob/=2
     random_matrix = torch.rand_like(x)
     salt_mask = random_matrix > 1.0 - noise_prob
     pepper_mask = random_matrix < noise_prob
@@ -1284,3 +1286,30 @@ class ChannelTransform(object):
             x = x[:self.target_channels, :, :]
 
         return x
+
+if __name__=='__main__':
+    dataset = LandUse(root='../MyData/UCMerced_LandUse',
+                      train=False)
+    imgs = dataset[0][0][0]
+    print(imgs.mode)
+    # ncols = 4
+    # nrows = 2  # 根据 batch_size 计算行数
+    # plt.figure(figsize=(ncols * 2, nrows * 2))
+    # for i in range(4):
+    #     # 计算当前图像所在的子图位置
+    #     plt.subplot(nrows, ncols, i + 1)
+    #     plt.imshow(imgs[i])
+    #     plt.axis('off')
+    #
+    # imgs = dataset[1][0]
+    # for i in range(4, 8):
+    #     # 计算当前图像所在的子图位置
+    #     plt.subplot(nrows, ncols, i + 1)
+    #     plt.imshow(imgs[i-4])
+    #     plt.axis('off')
+    #
+    #
+    # plt.tight_layout()
+    # plt.show()
+
+
