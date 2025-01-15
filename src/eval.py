@@ -200,8 +200,8 @@ def main():
                                            drop_last=False)
 
         consistency, vspecific, concate, all_concate, labels = extract_features(mask_train_dataloader, model, device)
-        print('eval on consist...')
-        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, consistency)
+        print('eval on concate...')
+        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, concate)
         eval_res["cluster-missing-mean"].append(np.mean(cluster_acc))
         eval_res["cluster-missing-std"].append(np.std(cluster_acc))
         eval_res["cls-missing-mean"].append(np.mean(cls_acc))
@@ -211,8 +211,8 @@ def main():
         print(f"[Evaluation on {i / 10} Salt-Pepper noise]")
         consistency, vspecific, concate, all_concate, labels = extract_features(train_dataloader, model, device,
                                                                                 noise_prob=i / 10)
-        print('eval on consist...')
-        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, consistency)
+        print('eval on concate...')
+        cluster_acc, _, _, cls_acc, _, _ = report(run_times, n_clusters, need_classification, labels, concate)
         eval_res["cluster-noise-mean"].append(np.mean(cluster_acc))
         eval_res["cluster-noise-std"].append(np.std(cluster_acc))
         eval_res["cls-noise-mean"].append(np.mean(cls_acc))
